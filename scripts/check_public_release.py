@@ -14,7 +14,7 @@ DENY = (
 )
 
 TEXT_SUFFIXES = {
-    ".py", ".md", ".txt", ".json", ".yml", ".yaml", ".cff",
+    ".py", ".pyfrag", ".md", ".txt", ".json", ".yml", ".yaml", ".cff",
     ".csv", ".toml", ".ini", ".cfg", ".sh", ""
 }
 
