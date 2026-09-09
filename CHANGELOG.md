@@ -1,11 +1,14 @@
 # Changelog
 
-## 1.0.0 — 2026-09-08
+## 1.1.0 — Repository structure update
 
-- assembled a public research repository from archived SGD experiment outputs;
-- restored exact executed scripts for Stage 3I-R, Stage 3J, Stage 3K and Stage M1;
-- added repaired Stage 3J summaries;
-- added compact Stage M2 result summaries;
-- added project status, claims, experiment history and robustness-gate documentation;
-- excluded large raw scientific artifacts from Git;
-- added automated syntax and public-release checks.
+- Updated public documentation around finite-step stochastic dynamics.
+- Added experiment structure for M1, M2, M7 and T1.
+- Added claim tracking and reproducibility documentation.
+- Added artifact policy updates.
+- Preserved negative and exploratory research stages.
+
+## 1.0.0 — Public research release
+
+- Initial public repository structure.
+- Added experiment documentation and reproducibility materials.
