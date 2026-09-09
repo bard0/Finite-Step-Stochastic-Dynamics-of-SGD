@@ -5,7 +5,8 @@ version: "1.0.0"
 date-released: 2026-09-09
 authors:
   - family-names: "Glazatov"
-    given-names: "V"
+    given-names: "Vladimir"
+    orcid: "https://orcid.org/0000-0003-4580-3723"
 repository-code: "https://github.com/bard0/Finite-Step-Stochastic-Dynamics-of-SGD"
 keywords:
   - stochastic gradient descent
