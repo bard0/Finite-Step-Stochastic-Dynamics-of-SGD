@@ -12,5 +12,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Public repository hygiene scan
+        run: python scripts/check_public_release.py
       - name: Python syntax check
         run: python -m compileall experiments
