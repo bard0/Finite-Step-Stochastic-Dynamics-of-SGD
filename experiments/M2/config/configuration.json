@@ -1,0 +1,26 @@
+{
+  "version": "M2-RR-temporal-covariance-v1",
+  "run_mode": "full",
+  "config": {
+    "seeds": [51, 52, 53, 54, 55, 56],
+    "fractions": [0.25, 0.55, 0.85],
+    "etas": [0.025, 0.05, 0.1],
+    "batches": [16, 32, 64, 128],
+    "hmax": 16,
+    "horizons": [1, 2, 4, 8, 10, 16],
+    "tangent_draws": 128,
+    "n_target": 128,
+    "n_audit": 128,
+    "bootstrap_draws": 5000,
+    "temporal_audit_draws": 256,
+    "projection_audit_dim": 8
+  },
+  "master_seed": 20260905,
+  "m1_source": "M1_finite_horizon_covariance",
+  "sampling": {
+    "IND_SUBSET": "fresh independent WOR subset each step",
+    "RR": "fresh permutation each epoch; consecutive non-overlapping batches"
+  },
+  "protocol_hash": "df54747c3ddd051b6d032d150fe0f746e85449e5323095bd2dd532777d6a0479",
+  "device": "cuda"
+}
