@@ -1,0 +1,124 @@
+                    path = reference_as_real_path(record) if mode == "real" else replay_counterfactual(record, noise_device, lr, device)
+                    print(f"  [seed {seed}] mode={mode}: Hessian-trace diagnostics", flush=True)
+                    path["hessian_trace"] = {h: hessian_trace_at(record, path, h, seed + 100 * h + len(mode), device) for h in CFG.horizons}
+                    per_mode[mode].append(path)
+                    store.save_npz(f"results/M7_2_neural_SGD/{tag}/seed_{seed}_{mode}_trajectory.npz", "neural_trajectory",
+                        theta=path["theta"].numpy().astype(np.float32), full_gradient=path["full_gradient"].numpy().astype(np.float32),
+                        noise=noise_cpu.numpy().astype(np.float32), loss=path["loss"].numpy().astype(np.float32), parameter_norm=path["parameter_norm"].numpy().astype(np.float32),
+                        hessian_horizons=np.asarray(CFG.horizons), hessian_trace=np.asarray([path["hessian_trace"][h] for h in CFG.horizons]))
+                store.save_npz(f"results/M7_2_neural_SGD/{tag}/seed_{seed}_reference_sgd.npz", "reference_sgd",
+                    theta=record["theta"].numpy().astype(np.float32), full_gradient=record["full_gradient"].numpy().astype(np.float32),
+                    batch_gradient=record["batch_gradient"].numpy().astype(np.float32), noise=record["noise"].numpy().astype(np.float32), batches=record["batches"].numpy())
+                store.checkpoint(f"m72_{tag}_seed_{seed}", {"complete": True, "tag": tag, "seed": seed})
+                print(f"  [seed {seed}] complete in {time.perf_counter()-seed_started:.1f}s", flush=True)
+            assert R is not None
+            metrics = neural_metrics(per_mode, R)
+            # EDMD is saved as diagnostics for every ordering, not used to choose metrics.
+            edmd = {mode: [edmd_diagnostics(projected_observables(p, R)) for p in paths] for mode, paths in per_mode.items()}
+            # Prediction uses each recorded A sequence; aggregates are intentionally left to the report.
+            predictions = [linear_response_prediction(rec, R[:CFG.hessian_probe_dim], lr, device) for rec in records]
+            result = {"diagnostic_schema": "neural_projection_v2",
+                      "temporal_ordering_checks_per_seed": checks, "finite_horizon_metrics": metrics,
+                      "edmd_diagnostics": edmd, "temporal_covariance_predictions_per_seed": predictions,
+                      "projection_matrix": R, "interpretation_lock": "No automated scientific verdict is produced."}
+            store.write_json(f"results/M7_2_neural_SGD/{tag}/metrics.json", result, "neural_metrics")
+            store.save_numpy(f"results/M7_2_neural_SGD/{tag}/fixed_projection.npy", R, "projection")
+            all_report["conditions"][tag] = result
+            store.checkpoint(f"m72_{tag}", {"complete": True, "seeds": list(CFG.seeds)})
+            print(f"[M7.2] condition {tag} complete in {time.perf_counter()-condition_started:.1f}s", flush=True)
+    print("[M7.2] complete", flush=True)
+    return all_report
+
+
+def make_figures(store: ArtifactStore, m71: Mapping[str, Any], m72: Mapping[str, Any]) -> None:
+    """Prespecified descriptive figures only; they contain no verdict annotations."""
+    import matplotlib.pyplot as plt
+    modes = ("real", "shuffle", "iid")
+    fig, ax = plt.subplots(figsize=(7.0, 4.0))
+    for mode in modes:
+        xs, ys = [], []
+        for rho_s, condition in m71["conditions"].items():
+            xs.append(float(rho_s)); ys.append(condition[mode]["spectrum"]["trace"])
+        ax.plot(xs, ys, marker="o", label=mode)
+    ax.set(xlabel="AR(1) rho", ylabel="trace empirical C_H", title="M7.1 finite-horizon covariance")
+    ax.legend(); fig.tight_layout(); store.save_figure("figures/M7_1_linear_covariance_trace.png", fig); plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(9.0, 4.5))
+    tags = list(m72["conditions"])
+    x = list(range(len(tags)))
+    for mode in modes:
+        vals = [m72["conditions"][tag]["finite_horizon_metrics"][str(max(CFG.horizons))][mode]["parameter_trace_covariance"] for tag in tags]
+        ax.plot(x, vals, marker="o", label=mode)
+    ax.set_xticks(x, tags, rotation=45, ha="right")
+    ax.set(xlabel="learning rate and batch size", ylabel="trace parameter covariance", title="M7.2 H=100 descriptive covariance")
+    ax.legend(); fig.tight_layout(); store.save_figure("figures/M7_2_neural_parameter_covariance_H100.png", fig); plt.close(fig)
+
+
+def pre_registered_text() -> str:
+    return """# M7 preregistered analysis boundary
+
+## Research question
+Does the temporal organization of stochastic-gradient noise provide predictive information about finite-horizon stochastic dynamics beyond marginal noise statistics?
+
+## Comparisons
+Mode A uses the recorded natural ordering. Mode B replays exactly the same recorded noise vectors in a random temporal permutation. Mode C replays an IID Gaussian surrogate fitted to A's empirical mean and covariance model. B and C are counterfactual frozen-noise replays using the same initialization, dataset, full-gradient update, learning rate, and horizon; they are not new minibatch-SGD runs.
+
+## Confirmation pattern
+The hypothesis is supported only if pre-outcome checks show exact A/B sample preservation and materially reduced off-diagonal temporal covariance in B/C, and if a prespecified finite-horizon metric consistently differs between A and B while a full temporal-K prediction improves on the K0-only prediction. This program reports quantities only; it makes no automated support claim.
+
+## Falsification pattern
+The hypothesis is not supported for a condition if A, B, and C agree within seed variability, if rho=0 does not yield approximate A/B/C agreement, if differences track only trace(Sigma), if distribution/covariance checks fail, or if any apparent effect is seed-specific.
+
+## Alternative explanations
+Finite sample error, replay mismatch away from the recorded path, non-Gaussianity in C, inadequate seed count, unstable nonlinear local response, optimizer implementation effects, and insufficient horizon are alternatives. EDMD/Koopman spectra are diagnostics only and cannot establish causation.
+"""
+
+
+def report_markdown(m71: Mapping[str, Any], m72: Mapping[str, Any]) -> str:
+    return pre_registered_text() + """
+## Experimental design
+M7.1 uses a stable diagonal linear system with eigenvalues 0.95, 0.8, 0.5, 0.2 and AR(1) noise at rho=0 and rho=0.75. M7.2 uses the frozen 10-32-32-1 ReLU MLP, synthetic regression data of size 512, batch sizes 8/16/32/64/128, learning rates .01/.005, and five fixed seeds. Horizons are 10/25/50/100.
+
+## Controls and saved outputs
+The run directory contains trajectories, reference full/batch gradients, noise sequences, covariance and spectral diagnostics, fixed config, immutable manifest, code copy, and this report. Each file has SHA-256 provenance in the manifest. Full parameter covariance is disabled by default to avoid multi-gigabyte artifacts; parameter diagonal covariance and complete covariance matrices in a fixed 32-dimensional random-projection space are stored. Set `store_full_parameter_covariance=True` before running only if Drive capacity permits.
+
+## Results
+This section is deliberately not interpreted by code. Read `M7_1_linear/*_metrics.json` and `M7_2_neural_SGD/*/metrics.json` after execution.
+
+## Statistical tests
+No post-hoc hypothesis test or automatic verdict is run. The saved seed-level outputs are intended for a preregistered paired analysis in which the pairing key is `(learning_rate, batch_size, seed, horizon, projection)`; do not compare array positions or retune metrics after results are observed.
+
+## Confounders and interpretation
+See the falsification and alternative-explanation sections above. The permitted interpretation, if later warranted by an independent analysis, is limited to: temporal organization of stochastic-gradient noise provides additional predictive information about finite-horizon stochastic dynamics beyond marginal noise statistics.
+
+## Whether the hypothesis survives
+UNDECIDED. This program does not calculate, select, or state a scientific verdict.
+"""
+
+
+def main() -> None:
+    print("[M7] starting", flush=True)
+    drive_root = resolve_project_root()
+    set_determinism(CFG.global_seed)
+    print("[M7] creating immutable run and saving source", flush=True)
+    store = ArtifactStore.open_or_create(drive_root, CFG)
+    print(f"[M7] {'resuming validated run' if store.resumed else 'created new run'}: {store.run_dir}", flush=True)
+    store.copy_source()
+    store.write_json("configs/config.json", asdict(CFG), "config")
+    store.write_json("configs/analysis_lock.json", {"frozen_design": True, "no_automated_verdict": True,
+        "pairing_key": ["learning_rate", "batch_size", "seed", "horizon", "projection"]}, "analysis_lock")
+    store.write_text("README.md", "# M7 temporal ordering causal ablation\n\nRun this source in a Python environment with the required dependencies. Artifacts are written under `SGD_PROJECT_ROOT` (default: `./artifacts`). The program reports no automated scientific verdict.\n", "readme")
+    store.write_text("configs/pre_registered_analysis.md", pre_registered_text(), "preregistration")
+    store.write_text("audit/runtime_analysis_boundary.md", "This run records prespecified diagnostics and contains no automated interpretation, threshold selection, or scientific verdict. Review the saved seed-level artifacts with the preregistered pairing key.\n", "audit")
+    print(f"[M7] durable run directory: {store.run_dir}", flush=True)
+    m71 = run_m71(store)
+    m72 = run_m72(store)
+    make_figures(store, m71, m72)
+    store.write_text("M7_report.md", report_markdown(m71, m72), "report")
+    archive = store.finalize()
+    print(f"COMPLETE: {store.run_dir}")
+    print(f"FINAL ZIP: {archive}")
+
+
+if __name__ == "__main__":
+    main()

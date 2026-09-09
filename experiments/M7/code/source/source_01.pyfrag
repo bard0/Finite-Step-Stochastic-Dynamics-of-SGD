@@ -1,0 +1,180 @@
+"""M7: temporal-ordering causal ablation for finite-horizon SGD dynamics.
+
+Public runnable version derived from the archived experiment source.
+"""
+
+# GPU is preferred when available; CPU execution is also supported.
+from __future__ import annotations
+
+import json
+import linecache
+import math
+import os
+import random
+import shutil
+import subprocess
+import sys
+import time
+import zipfile
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+from hashlib import sha256
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
+
+
+PROGRAM_SOURCE = r'''M7 temporal ordering causal ablation
+The canonical source is resolved from the executed file or the current cell's
+compiler cache/message before any experiment computation begins.
+'''
+
+
+def resolve_program_source() -> Tuple[str, str, str]:
+    """Return the public source used for this run."""
+    raw_file = globals().get("__file__")
+    if raw_file:
+        source_path = Path(str(raw_file))
+        if source_path.is_file():
+            return source_path.read_text(encoding="utf-8"), source_path.name, "executed_file"
+    raise RuntimeError("Public source file could not be resolved.")
+
+
+@dataclass(frozen=True)
+class Config:
+    # Frozen design: do not tune after inspecting results.
+    global_seed: int = 702917
+    seeds: Tuple[int, ...] = (1103, 2207, 3301, 4409, 5501)
+    dataset_size: int = 512
+    input_dim: int = 10
+    hidden_dims: Tuple[int, int] = (32, 32)
+    batch_sizes: Tuple[int, ...] = (8, 16, 32, 64, 128)
+    learning_rates: Tuple[float, ...] = (0.01, 0.005)
+    steps: int = 300
+    horizons: Tuple[int, ...] = (10, 25, 50, 100)
+    rho_values: Tuple[float, ...] = (0.0, 0.75)
+    linear_replicates: int = 256
+    linear_horizon: int = 100
+    noise_lags: int = 25
+    projection_dim: int = 32
+    edmd_features: int = 24
+    hessian_probe_dim: int = 12
+    hessian_stride: int = 10
+    max_torch_threads: int = 4
+    progress_every_steps: int = 50
+    experiment_name: str = "M7_temporal_ordering_causal_ablation"
+    # This is a capacity guard: a 2497x2497 covariance for every condition is
+    # needlessly multi-GB.  The default stores complete covariances in fixed
+    # random-projection space plus per-parameter diagonal covariance.
+    store_full_parameter_covariance: bool = False
+    device_preference: str = "cuda"
+    dtype: str = "float32"
+
+
+CFG = Config()
+
+
+def resolve_project_root() -> Path:
+    """Return the durable artifact root for the experiment."""
+    root = Path(os.environ.get("SGD_PROJECT_ROOT", "./artifacts")).expanduser().resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def stable_json(obj: Any) -> str:
+    def _default(value: Any) -> Any:
+        if isinstance(value, complex):
+            return {"real": value.real, "imag": value.imag}
+        try:
+            import numpy as np
+            if isinstance(value, np.ndarray): return value.tolist()
+            if isinstance(value, np.generic):
+                native = value.item()
+                return {"real": native.real, "imag": native.imag} if isinstance(native, complex) else native
+        except ImportError:
+            pass
+        return str(value)
+    return json.dumps(obj, sort_keys=True, ensure_ascii=False, indent=2, default=_default)
+
+
+def sha256_file(path: Path) -> str:
+    h = sha256()
+    with path.open("rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def atomic_copy(src: Path, dst: Path) -> None:
+    """Copy via same-directory temporary path so Drive never sees a partial file."""
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dst.with_name(dst.name + ".partial")
+    shutil.copy2(src, tmp)
+    os.replace(tmp, dst)
+
+
+class ArtifactStore:
+    def __init__(self, drive_root: Path, config: Config, resume_dir: Path | None = None) -> None:
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        if resume_dir is None:
+            self.run_dir = drive_root / config.experiment_name / f"run_{stamp}"
+            self.run_dir.mkdir(parents=True, exist_ok=False)
+            self.manifest_path = self.run_dir / "checkpoint_manifest.json"
+            self.manifest: Dict[str, Any] = {
+                "status": "RUNNING", "run_dir": str(self.run_dir), "created_utc": stamp,
+                "config": asdict(config), "artifacts": [],
+                "resume_policy": "resume most-progressed compatible RUNNING run after hash validation",
+                "resume_events": [],
+            }
+            self.resumed = False
+            self.flush_manifest()
+        else:
+            self.run_dir = resume_dir
+            self.manifest_path = self.run_dir / "checkpoint_manifest.json"
+            self.manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+            self.resumed = True
+            self.manifest.setdefault("resume_events", []).append({"resumed_utc": stamp})
+            self.manifest["resume_policy"] = "resume most-progressed compatible RUNNING run after hash validation"
+            self.flush_manifest()
+
+    @classmethod
+    def open_or_create(cls, drive_root: Path, config: Config) -> "ArtifactStore":
+        experiment_root = drive_root / config.experiment_name
+        expected_config = json.loads(stable_json(asdict(config)))
+        compatible: List[Tuple[Tuple[int, int, int, int, str], Path]] = []
+        candidates = sorted(experiment_root.glob("run_*")) if experiment_root.exists() else []
+        for candidate in candidates:
+            manifest_path = candidate / "checkpoint_manifest.json"
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if manifest.get("status") == "RUNNING" and manifest.get("config") == expected_config:
+                index: Dict[str, List[Mapping[str, Any]]] = {}
+                for item in manifest.get("artifacts", []):
+                    key = str(item.get("relative_path", "")).replace("\\", "/")
+                    index.setdefault(key, []).append(item)
+
+                def valid_file(relative: str) -> bool:
+                    path = candidate / relative
+                    entries = index.get(relative, [])
+                    return (len(entries) == 1 and path.is_file()
+                            and path.stat().st_size == int(entries[0].get("bytes", -1))
+                            and sha256_file(path) == entries[0].get("sha256"))
+
+                def valid_checkpoint(name: str, required: Sequence[str]) -> bool:
+                    relative = f"checkpoints/{name}.json"
+                    if not valid_file(relative) or not all(valid_file(path) for path in required):
+                        return False
+                    try:
+                        return bool(json.loads((candidate / relative).read_text(encoding="utf-8")).get("complete"))
+                    except Exception:
+                        return False
+
+                def seed_valid(tag: str, seed: int) -> bool:
+                    required = [f"results/M7_2_neural_SGD/{tag}/seed_{seed}_{mode}_trajectory.npz"
+                                for mode in ("real", "shuffle", "iid")]
+                    required.append(f"results/M7_2_neural_SGD/{tag}/seed_{seed}_reference_sgd.npz")
+                    return valid_checkpoint(f"m72_{tag}_seed_{seed}", required)
+
+                completed_conditions = 0
+                active_condition_seeds = 0

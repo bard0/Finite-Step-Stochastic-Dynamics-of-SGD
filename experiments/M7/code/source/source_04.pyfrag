@@ -1,0 +1,179 @@
+        rho_tag = f"rho_{rho:.2f}"
+        required = [f"results/M7_1_linear/{rho_tag}_{mode}.npz" for mode in ("real", "shuffle", "iid")]
+        required.append(f"results/M7_1_linear/{rho_tag}_metrics.json")
+        if store.checkpoint_valid(f"m71_{rho_tag}", required):
+            print(f"[M7.1] rho={rho:.2f}: restored from validated checkpoint", flush=True)
+            report["conditions"][str(rho)] = store.read_json(required[-1])
+            continue
+        print(f"[M7.1] rho={rho:.2f}: generating controlled noise", flush=True)
+        paths: Dict[str, List[Any]] = {"real": [], "shuffle": [], "iid": []}
+        noises: Dict[str, List[Any]] = {"real": [], "shuffle": [], "iid": []}
+        for rep in range(CFG.linear_replicates):
+            # Innovations scaled so marginal Cov(xi_t)=I for every rho.
+            eps = rng.normal(scale=math.sqrt(1.0 - rho * rho), size=(total, 4))
+            real = np.zeros_like(eps)
+            real[0] = rng.normal(size=4)
+            for t in range(1, total): real[t] = rho * real[t - 1] + eps[t]
+            real = real[-CFG.linear_horizon:]
+            shuffle = real[rng.permutation(len(real))]
+            iid = rng.multivariate_normal(real.mean(0), covariance(real), size=len(real))
+            for name, noise in (("real", real), ("shuffle", shuffle), ("iid", iid)):
+                noises[name].append(noise)
+        # Pool only for pre-outcome validation; do not integrate any path until
+        # the A/B intervention has been proved algebraically valid.
+        check = ablation_checks(np.concatenate(noises["real"]), np.concatenate(noises["shuffle"]), np.concatenate(noises["iid"]), CFG.noise_lags)
+        require_exact_ab_control(check)
+        for mode, sequence_list in noises.items():
+            paths[mode] = [simulate_linear(A, noise) for noise in sequence_list]
+        condition: Dict[str, Any] = {"rho": rho, "checks": {k: v for k, v in check.items() if not k.startswith("temporal_covariance")}}
+        for mode in paths:
+            endpoints = np.stack([p[-1] for p in paths[mode]])
+            noise_pool = np.concatenate(noises[mode])
+            K = temporal_covariances(noise_pool, CFG.linear_horizon - 1)
+            empirical = covariance(endpoints)
+            theory = theoretical_linear_covariance(A, K, CFG.linear_horizon)
+            condition[mode] = {"empirical_C_H": empirical, "theoretical_C_H": theory,
+                               "theory_relative_fro_error": float(np.linalg.norm(empirical-theory, "fro") / max(np.linalg.norm(empirical, "fro"), 1e-12)),
+                               "spectrum": cov_spectrum(empirical)}
+            store.save_npz(f"results/M7_1_linear/{rho_tag}_{mode}.npz", "linear_raw",
+                           noise=np.stack(noises[mode]).astype(np.float32), trajectories=np.stack(paths[mode]).astype(np.float32),
+                           C_H_empirical=empirical, C_H_theoretical=theory, temporal_covariance=K)
+        condition["A_dynamics"] = relaxation_times_from_A(A)
+        store.write_json(f"results/M7_1_linear/{rho_tag}_metrics.json", condition, "linear_metrics")
+        report["conditions"][str(rho)] = condition
+        store.checkpoint(f"m71_{rho_tag}", {"complete": True, "rho": rho})
+        print(f"[M7.1] rho={rho:.2f}: complete in {time.perf_counter()-started:.1f}s", flush=True)
+    print("[M7.1] complete", flush=True)
+    return report
+
+
+def flatten_parameters(model: Any) -> Any:
+    import torch
+    return torch.cat([p.detach().reshape(-1) for p in model.parameters()])
+
+
+def assign_parameters(model: Any, vector: Any) -> None:
+    offset = 0
+    for p in model.parameters():
+        n = p.numel()
+        p.data.copy_(vector[offset:offset+n].view_as(p))
+        offset += n
+    if offset != vector.numel(): raise ValueError("Parameter vector has wrong length.")
+
+
+def gradient_vector(loss: Any, model: Any, create_graph: bool = False) -> Any:
+    import torch
+    grads = torch.autograd.grad(loss, tuple(model.parameters()), create_graph=create_graph, retain_graph=create_graph)
+    return torch.cat([g.reshape(-1) for g in grads])
+
+
+def make_dataset(seed: int, device: Any) -> Tuple[Any, Any]:
+    import torch
+    gen = torch.Generator(device="cpu").manual_seed(seed)
+    x = torch.randn(CFG.dataset_size, CFG.input_dim, generator=gen).to(device)
+    teacher = torch.randn(CFG.input_dim, 1, generator=gen).to(device)
+    y = x @ teacher + 0.25 * torch.sin(x[:, :1] * 2.0) + 0.1 * torch.randn(CFG.dataset_size, 1, generator=gen).to(device)
+    return x, y
+
+
+def make_model(seed: int, device: Any) -> Any:
+    import torch
+    return torch.nn.Sequential(torch.nn.Linear(10, 32), torch.nn.ReLU(), torch.nn.Linear(32, 32), torch.nn.ReLU(), torch.nn.Linear(32, 1)).to(device)
+
+
+def full_and_batch_noise(model: Any, x: Any, y: Any, batch_idx: Any) -> Tuple[Any, Any, Any]:
+    import torch
+    mse = torch.nn.MSELoss(reduction="mean")
+    full_loss = mse(model(x), y); g_full = gradient_vector(full_loss, model)
+    batch_loss = mse(model(x[batch_idx]), y[batch_idx]); g_batch = gradient_vector(batch_loss, model)
+    return full_loss.detach(), g_full.detach(), (g_batch - g_full).detach()
+
+
+def reference_sgd_record(seed: int, batch_size: int, lr: float, device: Any) -> Dict[str, Any]:
+    """The only genuine minibatch-SGD path.  It supplies frozen A noise samples."""
+    import torch
+    set_determinism(seed); x, y = make_dataset(seed + 17, device)
+    set_determinism(seed + 101); model = make_model(seed + 101, device)
+    gen = torch.Generator(device="cpu").manual_seed(seed + 1009)
+    theta0 = flatten_parameters(model).detach().clone()
+    # Keep the short trajectory on the accelerator and transfer once at the
+    # end; per-step .cpu() calls otherwise synchronize the L4 thousands of times.
+    thetas, full_grads, batch_grads, noises, losses, batches = [theta0.detach().clone()], [], [], [], [], []
+    for step in range(CFG.steps):
+        idx = torch.randperm(CFG.dataset_size, generator=gen)[:batch_size].to(device)
+        loss, g_full, xi = full_and_batch_noise(model, x, y, idx)
+        g_batch = g_full + xi
+        full_grads.append(g_full); batch_grads.append(g_batch)
+        noises.append(xi); losses.append(loss); batches.append(idx)
+        with torch.no_grad(): assign_parameters(model, flatten_parameters(model) - lr * g_batch)
+        thetas.append(flatten_parameters(model).detach().clone())
+        if (step + 1) % CFG.progress_every_steps == 0:
+            print(f"      reference {step+1}/{CFG.steps}", flush=True)
+    theta_device = torch.stack(thetas)
+    full_device = torch.stack(full_grads); batch_device = torch.stack(batch_grads); noise_device = torch.stack(noises)
+    return {"x": x, "y": y, "theta0": theta0, "theta": theta_device.cpu(), "full_gradient": full_device.cpu(),
+            "batch_gradient": batch_device.cpu(), "noise": noise_device.cpu(), "noise_device": noise_device,
+            "loss": torch.stack(losses).cpu(), "batches": torch.stack(batches).cpu()}
+
+
+def gaussian_iid_surrogate(noise: Any, seed: int, device: Any) -> Any:
+    import torch
+    # Low-rank empirical covariance sample via centered empirical rows: exact
+    # mean and covariance model without forming a P x P covariance matrix.
+    source = noise.detach().to(device); centered = source - source.mean(0, keepdim=True)
+    gen = torch.Generator(device="cpu").manual_seed(seed)
+    z = torch.randn((len(source), len(source)), generator=gen, dtype=torch.float32).to(device, non_blocking=True)
+    z = z / math.sqrt(len(source))
+    # The 300x300-by-parameter multiplication is deliberately performed on L4.
+    return source.mean(0, keepdim=True) + z @ centered
+
+
+def replay_counterfactual(record: Mapping[str, Any], noise: Any, lr: float, device: Any) -> Dict[str, Any]:
+    """Replay frozen additive noise.  B/C are counterfactual dynamics, not SGD batches."""
+    import torch
+    x, y = record["x"], record["y"]
+    model = make_model(0, device); assign_parameters(model, record["theta0"].to(device))
+    theta = [flatten_parameters(model).detach().clone()]
+    full_grad, loss = [], []
+    param_norm = [torch.linalg.vector_norm(theta[0])]
+    mse = torch.nn.MSELoss(reduction="mean")
+    noise_device = noise if noise.device == device else noise.to(device, non_blocking=True)
+    for step, xi in enumerate(noise_device):
+        current_loss = mse(model(x), y); g = gradient_vector(current_loss, model).detach()
+        full_grad.append(g); loss.append(current_loss.detach())
+        with torch.no_grad(): assign_parameters(model, flatten_parameters(model) - lr * (g + xi))
+        theta.append(flatten_parameters(model).detach().clone())
+        param_norm.append(torch.linalg.vector_norm(theta[-1]))
+        if (step + 1) % CFG.progress_every_steps == 0:
+            print(f"      replay {step+1}/{CFG.steps}", flush=True)
+    return {"theta": torch.stack(theta).cpu(), "full_gradient": torch.stack(full_grad).cpu(),
+            "loss": torch.stack(loss).cpu(), "parameter_norm": torch.stack(param_norm).cpu()}
+
+
+def reference_as_real_path(record: Mapping[str, Any]) -> Dict[str, Any]:
+    """Reuse the genuine SGD path as Mode A; avoids an identical recomputation."""
+    import torch
+    theta = record["theta"]
+    return {"theta": theta, "full_gradient": record["full_gradient"], "loss": record["loss"],
+            "parameter_norm": torch.linalg.vector_norm(theta, dim=1)}
+
+
+def hutchinson_trace(model: Any, x: Any, y: Any, seed: int, probes: int = 4) -> float:
+    """Deterministic Hessian trace approximation; diagnostics only."""
+    import torch
+    mse = torch.nn.MSELoss(); loss = mse(model(x), y); g = gradient_vector(loss, model, create_graph=True)
+    gen = torch.Generator(device="cpu").manual_seed(seed)
+    vectors = (2 * torch.randint(0, 2, (probes, g.numel()), generator=gen, device="cpu") - 1).to(g.device, g.dtype)
+    # One batched VJP keeps all probes in a single accelerator dispatch.
+    hv_parts = torch.autograd.grad(g, tuple(model.parameters()), grad_outputs=vectors,
+                                   is_grads_batched=True, retain_graph=False)
+    hv = torch.cat([part.reshape(probes, -1) for part in hv_parts], dim=1)
+    return float(((hv * vectors).sum(dim=1).mean()).detach().cpu())
+
+
+def hessian_trace_at(record: Mapping[str, Any], path: Mapping[str, Any], horizon: int, seed: int, device: Any) -> float:
+    """Hessian trace at the frozen counterfactual state theta_H."""
+    model = make_model(0, device)
+    assign_parameters(model, path["theta"][horizon].to(device))
+    return hutchinson_trace(model, record["x"], record["y"], seed=seed, probes=4)
+

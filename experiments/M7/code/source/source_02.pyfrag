@@ -1,0 +1,180 @@
+                total_valid_seeds = 0
+                frontier_reached = False
+                for lr in config.learning_rates:
+                    for batch in config.batch_sizes:
+                        tag = f"lr_{lr:.4f}_batch_{batch}"
+                        valid_seeds = sum(seed_valid(tag, seed) for seed in config.seeds)
+                        total_valid_seeds += valid_seeds
+                        condition_required = [f"results/M7_2_neural_SGD/{tag}/metrics.json",
+                                              f"results/M7_2_neural_SGD/{tag}/fixed_projection.npy"]
+                        full_condition = valid_seeds == len(config.seeds) and valid_checkpoint(f"m72_{tag}", condition_required)
+                        if not frontier_reached and full_condition:
+                            completed_conditions += 1
+                        elif not frontier_reached:
+                            active_condition_seeds = valid_seeds
+                            frontier_reached = True
+                linear_valid = 0
+                for rho in config.rho_values:
+                    rho_tag = f"rho_{rho:.2f}"
+                    required = [f"results/M7_1_linear/{rho_tag}_{mode}.npz" for mode in ("real", "shuffle", "iid")]
+                    required.append(f"results/M7_1_linear/{rho_tag}_metrics.json")
+                    linear_valid += int(valid_checkpoint(f"m71_{rho_tag}", required))
+                score = (completed_conditions, active_condition_seeds, total_valid_seeds, linear_valid, candidate.name)
+                print(f"[resume] candidate {candidate.name}: sequential_conditions={completed_conditions}, frontier_seeds={active_condition_seeds}, total_valid_seeds={total_valid_seeds}, linear={linear_valid}", flush=True)
+                compatible.append((score, candidate))
+        if compatible:
+            score, selected = max(compatible, key=lambda item: item[0])
+            print(f"[resume] selected frozen-design frontier: {selected.name} score={score[:-1]}", flush=True)
+            return cls(drive_root, config, resume_dir=selected)
+        return cls(drive_root, config)
+
+    def flush_manifest(self) -> None:
+        tmp = self.manifest_path.with_suffix(".json.partial")
+        tmp.write_text(stable_json(self.manifest), encoding="utf-8")
+        os.replace(tmp, self.manifest_path)
+
+    def write_json(self, relative: str, value: Any, kind: str = "metadata") -> Path:
+        path = self.run_dir / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(path.suffix + ".partial")
+        tmp.write_text(stable_json(value), encoding="utf-8")
+        os.replace(tmp, path)
+        self.record(path, kind)
+        return path
+
+    def write_text(self, relative: str, value: str, kind: str = "text") -> Path:
+        path = self.run_dir / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(path.suffix + ".partial")
+        tmp.write_text(value, encoding="utf-8")
+        os.replace(tmp, path)
+        self.record(path, kind)
+        return path
+
+    def save_figure(self, relative: str, figure: Any) -> Path:
+        path = self.run_dir / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(path.suffix + ".png.partial")
+        figure.savefig(tmp, format="png", dpi=160, bbox_inches="tight")
+        os.replace(tmp, path)
+        self.record(path, "figure")
+        return path
+
+    def save_numpy(self, relative: str, array: Any, kind: str) -> Path:
+        import numpy as np
+        path = self.run_dir / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(path.suffix + ".partial")
+        with tmp.open("wb") as f:
+            np.save(f, array)
+        os.replace(tmp, path)
+        self.record(path, kind)
+        return path
+
+    def save_npz(self, relative: str, kind: str, **arrays: Any) -> Path:
+        import numpy as np
+        path = self.run_dir / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(path.suffix + ".partial")
+        # A file handle prevents NumPy from silently appending a second .npz.
+        with tmp.open("wb") as f:
+            np.savez_compressed(f, **arrays)
+        os.replace(tmp, path)
+        self.record(path, kind)
+        return path
+
+    def copy_source(self) -> None:
+        source_text, source_name, capture_method = resolve_program_source()
+        target = self.run_dir / "source" / source_name
+        source_hash = sha256(source_text.encode("utf-8")).hexdigest()
+        if target.exists() and sha256_file(target) != source_hash:
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            target = target.with_name(f"{target.stem}_resume_{stamp}{target.suffix}")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        tmp = target.with_suffix(target.suffix + ".partial")
+        tmp.write_text(source_text, encoding="utf-8")
+        os.replace(tmp, target)
+        self.record(target, "source")
+        revision = {"relative_path": target.relative_to(self.run_dir).as_posix(), "sha256": sha256_file(target),
+                    "capture_method": capture_method, "recorded_utc": datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")}
+        self.manifest.setdefault("source_revisions", []).append(revision)
+        self.manifest["source_sha256"] = revision["sha256"]
+        self.manifest["source_capture_method"] = capture_method
+        self.flush_manifest()
+
+    def read_json(self, relative: str) -> Dict[str, Any]:
+        return json.loads((self.run_dir / relative).read_text(encoding="utf-8"))
+
+    def artifact_valid(self, relative: str) -> bool:
+        relative = relative.replace("\\", "/")
+        path = self.run_dir / relative
+        matches = [item for item in self.manifest.get("artifacts", [])
+                   if str(item.get("relative_path", "")).replace("\\", "/") == relative]
+        if len(matches) != 1 or not path.is_file():
+            return False
+        item = matches[0]
+        return path.stat().st_size == int(item.get("bytes", -1)) and sha256_file(path) == item.get("sha256")
+
+    def checkpoint_valid(self, name: str, required_files: Sequence[str]) -> bool:
+        relative = f"checkpoints/{name}.json"
+        if not self.artifact_valid(relative):
+            return False
+        try:
+            payload = self.read_json(relative)
+        except Exception:
+            return False
+        return bool(payload.get("complete")) and all(self.artifact_valid(path) for path in required_files)
+
+    def record(self, path: Path, kind: str) -> None:
+        item = {"relative_path": path.relative_to(self.run_dir).as_posix(), "kind": kind,
+                "sha256": sha256_file(path), "bytes": path.stat().st_size}
+        self.manifest["artifacts"] = [x for x in self.manifest["artifacts"]
+                                      if str(x["relative_path"]).replace("\\", "/") != item["relative_path"]]
+        self.manifest["artifacts"].append(item)
+        self.flush_manifest()
+
+    def checkpoint(self, name: str, payload: Mapping[str, Any]) -> None:
+        self.write_json(f"checkpoints/{name}.json", dict(payload), "checkpoint")
+
+    def finalize(self) -> Path:
+        self.manifest["status"] = "COMPLETE"
+        self.manifest["completed_utc"] = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        self.flush_manifest()
+        zip_path = self.run_dir.parent / f"M7_results_{self.manifest['completed_utc']}.zip"
+        tmp_zip = zip_path.with_suffix(".zip.partial")
+        with zipfile.ZipFile(tmp_zip, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
+            for path in sorted(self.run_dir.rglob("*")):
+                if path.is_file():
+                    zf.write(path, arcname=f"{self.run_dir.name}/{path.relative_to(self.run_dir)}")
+        os.replace(tmp_zip, zip_path)
+        # Verify archive content rather than assuming ZipFile.write succeeded.
+        with zipfile.ZipFile(zip_path) as zf:
+            names = set(zf.namelist())
+        required = {f"{self.run_dir.name}/checkpoint_manifest.json", f"{self.run_dir.name}/M7_report.md"}
+        if not required.issubset(names):
+            raise RuntimeError("Final ZIP verification failed: required files missing.")
+        # The final archive deliberately sits beside the immutable run directory,
+        # so it cannot be listed relative to that directory in ``artifacts``.
+        self.manifest["final_archive"] = {"path": str(zip_path), "sha256": sha256_file(zip_path),
+                                          "bytes": zip_path.stat().st_size}
+        self.flush_manifest()
+        return zip_path
+
+
+def set_determinism(seed: int) -> None:
+    import numpy as np
+    import torch
+    random.seed(seed); np.random.seed(seed); torch.manual_seed(seed); torch.cuda.manual_seed_all(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+    try:
+        torch.use_deterministic_algorithms(True, warn_only=True)
+    except Exception:
+        pass
+
+
+def choose_device() -> Any:
+    import torch
+    if CFG.device_preference == "cuda" and torch.cuda.is_available():
+        return torch.device("cuda")
