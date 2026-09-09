@@ -16,3 +16,21 @@ jobs:
         run: python scripts/check_public_release.py
       - name: Python syntax check
         run: python -m compileall experiments
+      - name: Reconstruct and compile public experiment sources
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          checked = 0
+          for source_dir in sorted(Path("experiments").glob("*/code/source")):
+              parts = sorted(source_dir.glob("source_*.pyfrag"))
+              if not parts:
+                  continue
+              source = "".join(path.read_text(encoding="utf-8") for path in parts)
+              compile(source, str(source_dir.parent / "archived_public_run.py"), "exec")
+              print(f"compiled {source_dir.parent}: {len(parts)} fragments")
+              checked += 1
+
+          if checked == 0:
+              raise SystemExit("No public experiment source fragments found")
+          PY
