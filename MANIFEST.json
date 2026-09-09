@@ -1,274 +1,51 @@
-[
-  {
-    "path": ".github/workflows/quality.yml",
-    "size_bytes": 393
-  },
-  {
-    "path": ".gitignore",
-    "size_bytes": 141
-  },
-  {
-    "path": "ARTIFACTS.md",
-    "size_bytes": 629
-  },
-  {
-    "path": "CHANGELOG.md",
-    "size_bytes": 470
-  },
-  {
-    "path": "CITATION.cff",
-    "size_bytes": 185
-  },
-  {
-    "path": "CONTRIBUTING.md",
-    "size_bytes": 363
-  },
-  {
-    "path": "LICENSE",
-    "size_bytes": 1081
-  },
-  {
-    "path": "Makefile",
-    "size_bytes": 81
-  },
-  {
-    "path": "README.md",
-    "size_bytes": 1899
-  },
-  {
-    "path": "docs/claims_archive.md",
-    "size_bytes": 14424
-  },
-  {
-    "path": "docs/experiment_log_archive.md",
-    "size_bytes": 18672
-  },
-  {
-    "path": "docs/literature_positioning.md",
-    "size_bytes": 760
-  },
-  {
-    "path": "docs/m3_robustness_gate.md",
-    "size_bytes": 1655
-  },
-  {
-    "path": "docs/project_status_archive.md",
-    "size_bytes": 17675
-  },
-  {
-    "path": "docs/reproducibility.md",
-    "size_bytes": 877
-  },
-  {
-    "path": "docs/scientific_summary.md",
-    "size_bytes": 2613
-  },
-  {
-    "path": "environment.yml",
-    "size_bytes": 183
-  },
-  {
-    "path": "experiments/01_stage3ir_hvp_validation/README.md",
-    "size_bytes": 360
-  },
-  {
-    "path": "experiments/01_stage3ir_hvp_validation/run_exact.py",
-    "size_bytes": 32040
-  },
-  {
-    "path": "experiments/02_stage3j_residual_test/README.md",
-    "size_bytes": 374
-  },
-  {
-    "path": "experiments/02_stage3j_residual_test/run_exact.py",
-    "size_bytes": 28346
-  },
-  {
-    "path": "experiments/02_stage3j_residual_test/stage3ir_protocol_reference.py",
-    "size_bytes": 32040
-  },
-  {
-    "path": "experiments/03_stage3k_zero_fit_prediction/README.md",
-    "size_bytes": 373
-  },
-  {
-    "path": "experiments/03_stage3k_zero_fit_prediction/run_exact.py",
-    "size_bytes": 44974
-  },
-  {
-    "path": "experiments/03_stage3k_zero_fit_prediction/stage3ir_protocol_reference.py",
-    "size_bytes": 32040
-  },
-  {
-    "path": "experiments/04_m1_finite_horizon_covariance_iid/README.md",
-    "size_bytes": 444
-  },
-  {
-    "path": "experiments/04_m1_finite_horizon_covariance_iid/run_exact.py",
-    "size_bytes": 56771
-  },
-  {
-    "path": "requirements.txt",
-    "size_bytes": 48
-  },
-  {
-    "path": "results/01_stage3ir_hvp_validation/README.md",
-    "size_bytes": 1223
-  },
-  {
-    "path": "results/01_stage3ir_hvp_validation/archived_c2_scale_factor_audit.csv",
-    "size_bytes": 469
-  },
-  {
-    "path": "results/01_stage3ir_hvp_validation/configuration.json",
-    "size_bytes": 1491
-  },
-  {
-    "path": "results/01_stage3ir_hvp_validation/decision.json",
-    "size_bytes": 1217
-  },
-  {
-    "path": "results/01_stage3ir_hvp_validation/per_direction_summary.csv",
-    "size_bytes": 564636
-  },
-  {
-    "path": "results/01_stage3ir_hvp_validation/pooled_summary.csv",
-    "size_bytes": 530
-  },
-  {
-    "path": "results/01_stage3ir_hvp_validation/provenance_report.json",
-    "size_bytes": 611
-  },
-  {
-    "path": "results/01_stage3ir_hvp_validation/state_summary.csv",
-    "size_bytes": 4041
-  },
-  {
-    "path": "results/02_stage3j_residual_test/batch_scaling.csv",
-    "size_bytes": 751
-  },
-  {
-    "path": "results/02_stage3j_residual_test/code_audit_report.md",
-    "size_bytes": 300
-  },
-  {
-    "path": "results/02_stage3j_residual_test/configuration.json",
-    "size_bytes": 642
-  },
-  {
-    "path": "results/02_stage3j_residual_test/decision.json",
-    "size_bytes": 952
-  },
-  {
-    "path": "results/02_stage3j_residual_test/decision_report.md",
-    "size_bytes": 733
-  },
-  {
-    "path": "results/02_stage3j_residual_test/fraction_summary.csv",
-    "size_bytes": 434
-  },
-  {
-    "path": "results/02_stage3j_residual_test/higher_order_mechanism.csv",
-    "size_bytes": 2812
-  },
-  {
-    "path": "results/02_stage3j_residual_test/pool_replication_metrics.csv",
-    "size_bytes": 770
-  },
-  {
-    "path": "results/02_stage3j_residual_test/pooled_summary.csv",
-    "size_bytes": 477
-  },
-  {
-    "path": "results/02_stage3j_residual_test/provenance_report.json",
-    "size_bytes": 719
-  },
-  {
-    "path": "results/02_stage3j_residual_test/seed_summary.csv",
-    "size_bytes": 469
-  },
-  {
-    "path": "results/03_stage3k_zero_fit_prediction/baseline_summary.csv",
-    "size_bytes": 359
-  },
-  {
-    "path": "results/03_stage3k_zero_fit_prediction/condition_summary.csv",
-    "size_bytes": 4806
-  },
-  {
-    "path": "results/03_stage3k_zero_fit_prediction/decision.json",
-    "size_bytes": 1716
-  },
-  {
-    "path": "results/03_stage3k_zero_fit_prediction/decision_report.md",
-    "size_bytes": 1001
-  },
-  {
-    "path": "results/03_stage3k_zero_fit_prediction/numerical_audit.md",
-    "size_bytes": 384
-  },
-  {
-    "path": "results/03_stage3k_zero_fit_prediction/prediction_freeze.json",
-    "size_bytes": 258
-  },
-  {
-    "path": "results/03_stage3k_zero_fit_prediction/preregistration.json",
-    "size_bytes": 519
-  },
-  {
-    "path": "results/03_stage3k_zero_fit_prediction/provenance_report.json",
-    "size_bytes": 460
-  },
-  {
-    "path": "results/03_stage3k_zero_fit_prediction/seed_summary.csv",
-    "size_bytes": 268
-  },
-  {
-    "path": "results/03_stage3k_zero_fit_prediction/target_audit_replication.csv",
-    "size_bytes": 36716
-  },
-  {
-    "path": "results/03_stage3k_zero_fit_prediction/validity_boundary.csv",
-    "size_bytes": 4806
-  },
-  {
-    "path": "results/04_m1_finite_horizon_covariance_iid/README.md",
-    "size_bytes": 535
-  },
-  {
-    "path": "results/04_m1_finite_horizon_covariance_iid/baseline_comparison.csv",
-    "size_bytes": 1040
-  },
-  {
-    "path": "results/04_m1_finite_horizon_covariance_iid/bootstrap_summary.csv",
-    "size_bytes": 2537
-  },
-  {
-    "path": "results/04_m1_finite_horizon_covariance_iid/configuration.json",
-    "size_bytes": 972
-  },
-  {
-    "path": "results/04_m1_finite_horizon_covariance_iid/decision.json",
-    "size_bytes": 1405
-  },
-  {
-    "path": "results/04_m1_finite_horizon_covariance_iid/horizon_summary.csv",
-    "size_bytes": 721
-  },
-  {
-    "path": "results/04_m1_finite_horizon_covariance_iid/seed_summary.csv",
-    "size_bytes": 4102
-  },
-  {
-    "path": "results/05_m2_random_reshuffling/decision.json",
-    "size_bytes": 2574
-  },
-  {
-    "path": "results/05_m2_random_reshuffling/decision_report.md",
-    "size_bytes": 2340
-  },
-  {
-    "path": "scripts/check_public_release.py",
-    "size_bytes": 728
-  }
-]
+{
+  "schema_version": 2,
+  "scope": "canonical public repository layout",
+  "note": "Large raw trajectories, checkpoints, tensor archives and generated caches are intentionally excluded from normal Git history.",
+  "canonical_paths": [
+    "README.md",
+    "ARTIFACTS.md",
+    "CHANGELOG.md",
+    "CITATION.cff",
+    "CONTRIBUTING.md",
+    "LICENSE",
+    "requirements.txt",
+    "environment.yml",
+    "docs/project_overview.md",
+    "docs/experiment_map.md",
+    "docs/claims_and_evidence.md",
+    "docs/claim_policy.md",
+    "docs/literature_positioning.md",
+    "docs/reproducibility.md",
+    "docs/experiment_status.md",
+    "docs/roadmap.md",
+    "docs/next_actions.md",
+    "experiments/M1/README.md",
+    "experiments/M1/code/run.py",
+    "experiments/M1/code/source/",
+    "experiments/M1/config/configuration.json",
+    "experiments/M1/results/",
+    "experiments/M1/provenance.md",
+    "experiments/M2/README.md",
+    "experiments/M2/code/run.py",
+    "experiments/M2/code/source/",
+    "experiments/M2/config/configuration.json",
+    "experiments/M2/results/decision_report.md",
+    "experiments/M2/provenance.md",
+    "experiments/M7/README.md",
+    "experiments/M7/code/run.py",
+    "experiments/M7/code/source/",
+    "experiments/M7/config/configuration.json",
+    "experiments/M7/results/linear_summary.csv",
+    "experiments/M7/results/preregistered_analysis_boundary.md",
+    "experiments/M7/causal_design.md",
+    "experiments/T1/README.md",
+    "paper/outline.md",
+    "paper/roadmap.md",
+    "results/confirmed/README.md",
+    "results/exploratory/README.md",
+    "results/failed/README.md",
+    "scripts/check_public_release.py",
+    ".github/workflows/quality.yml"
+  ]
+}
