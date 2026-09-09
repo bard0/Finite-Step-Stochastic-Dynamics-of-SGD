@@ -4,8 +4,8 @@ message: "Please cite this repository release when using the experimental framew
 version: "1.0.0"
 date-released: 2026-09-09
 authors:
-  - family-names: "Mish"
-    given-names: "Vov"
+  - family-names: "Glazatov"
+    given-names: "V"
 repository-code: "https://github.com/bard0/Finite-Step-Stochastic-Dynamics-of-SGD"
 keywords:
   - stochastic gradient descent
