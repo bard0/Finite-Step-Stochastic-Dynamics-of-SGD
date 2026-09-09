@@ -1,5 +1,16 @@
 cff-version: 1.2.0
 title: "Finite-Step Stochastic Dynamics of SGD"
-message: "Please cite the corresponding research paper or repository release."
+message: "Please cite this repository release when using the experimental framework or archived results."
 version: "1.0.0"
 date-released: 2026-09-09
+authors:
+  - family-names: "Mish"
+    given-names: "Vov"
+repository-code: "https://github.com/bard0/Finite-Step-Stochastic-Dynamics-of-SGD"
+keywords:
+  - stochastic gradient descent
+  - stochastic dynamics
+  - finite-step dynamics
+  - gradient noise
+  - covariance prediction
+  - machine learning theory
