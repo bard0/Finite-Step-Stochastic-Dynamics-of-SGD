@@ -1,0 +1,180 @@
+#    The scientific data, projections, states, and trajectory RNGs are fresh.
+# ============================================================================
+class TinyCNN(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.f = nn.Sequential(
+            nn.Conv2d(3, 8, 3, padding=1), nn.Tanh(), nn.AvgPool2d(2),
+            nn.Conv2d(8, 12, 3, padding=1), nn.Tanh(), nn.AdaptiveAvgPool2d(1),
+        )
+        self.h = nn.Linear(12, 10)
+    def forward(self, x):
+        return self.h(self.f(x).flatten(1))
+
+def new_model(dtype=DTYPE):
+    return TinyCNN().to(device=DEVICE, dtype=dtype)
+
+def flat_params(model):
+    return torch.cat([p.detach().reshape(-1) for p in model.parameters()])
+
+def set_flat(model, vector):
+    # Immutable checkpoints and deterministic paths are persisted as NumPy
+    # float64 arrays, whereas in-memory callers supply tensors.  Accept both
+    # representations at this single boundary; all model arithmetic below is
+    # still performed in the model's requested dtype on DEVICE.
+    vector = torch.as_tensor(vector, device=DEVICE, dtype=next(model.parameters()).dtype)
+    start = 0
+    with torch.no_grad():
+        for p in model.parameters():
+            n = p.numel(); p.copy_(vector[start:start+n].reshape_as(p)); start += n
+    if start != vector.numel(): die("Flat parameter vector has wrong dimension.")
+
+def full_loss(model, x, y):
+    return F.cross_entropy(model(x), y)
+
+def grad_vec(model, x, y, create_graph=False):
+    grads = torch.autograd.grad(full_loss(model, x, y), tuple(model.parameters()), create_graph=create_graph)
+    return torch.cat([g.reshape(-1) for g in grads])
+
+def loss_hvp(model, x, y, vector):
+    """Exact float64 Hessian-vector product; no dense Hessian is formed."""
+    params = tuple(model.parameters())
+    g = torch.autograd.grad(full_loss(model, x, y), params, create_graph=True, retain_graph=True)
+    directional = torch.dot(torch.cat([a.reshape(-1) for a in g]), vector)
+    h = torch.autograd.grad(directional, params, retain_graph=False, allow_unused=True)
+    return torch.cat([(torch.zeros_like(p) if q is None else q).reshape(-1) for p, q in zip(params, h)])
+
+def covariance(x):
+    """Centered sample covariance, with numerical symmetrization only."""
+    x = np.asarray(x, dtype=np.float64)
+    if x.ndim != 2 or x.shape[0] < 2: die("Covariance needs at least two trajectory samples.")
+    xc = x - x.mean(axis=0, keepdims=True)
+    c = (xc.T @ xc) / (x.shape[0] - 1)
+    return 0.5 * (c + c.T)
+
+def spectral_summary(c):
+    c = 0.5 * (np.asarray(c, dtype=np.float64) + np.asarray(c, dtype=np.float64).T)
+    vals, vecs = np.linalg.eigh(c)
+    scale = max(1.0, float(np.max(np.abs(vals))))
+    if np.min(vals) < -1e-9 * scale:
+        die(f"Covariance has a materially negative eigenvalue: {np.min(vals):.3e}")
+    vals = np.maximum(vals, 0.0)
+    order = np.argsort(vals)[::-1]
+    vals, vecs = vals[order], vecs[:, order]
+    trace = float(vals.sum())
+    if trace <= RIDGE_EPS:
+        erank = 0.0
+    else:
+        p = vals[vals > RIDGE_EPS] / trace
+        erank = float(np.exp(-(p * np.log(p)).sum()))
+    return {"trace": trace, "fro": float(np.linalg.norm(c, "fro")), "eigvals": vals,
+            "eigvecs": vecs, "top": float(vals[0]), "erank": erank}
+
+def safe_relative(a, b):
+    return float(abs(a - b) / max(abs(b), RIDGE_EPS))
+
+def covariance_metrics(target, prediction):
+    target = 0.5 * (target + target.T); prediction = 0.5 * (prediction + prediction.T)
+    st, sp = spectral_summary(target), spectral_summary(prediction)
+    denom = max(st["fro"], RIDGE_EPS)
+    ferr = float(np.linalg.norm(target - prediction, "fro") / denom)
+    cosine = float(np.sum(target * prediction) / max(st["fro"] * sp["fro"], RIDGE_EPS))
+    skill = float(1.0 - ferr**2)
+    k = min(TOP_K, target.shape[0])
+    u, v = st["eigvecs"][:, :k], sp["eigvecs"][:, :k]
+    angles = subspace_angles(u, v)
+    # Fraction of TARGET variance captured by the *predicted* leading subspace.
+    explained = float(np.trace(v.T @ target @ v) / max(st["trace"], RIDGE_EPS)) if k else np.nan
+    return {
+        "fro_error": ferr, "fro_skill": skill, "matrix_cosine": cosine,
+        "trace_rel_error": safe_relative(sp["trace"], st["trace"]),
+        "top_eig_rel_error": safe_relative(sp["top"], st["top"]),
+        "effective_rank_abs_error": float(abs(sp["erank"] - st["erank"])),
+        "top1_overlap": float(abs(np.dot(st["eigvecs"][:, 0], sp["eigvecs"][:, 0]))),
+        "topk_grassmann": float(np.linalg.norm(angles)),
+        "target_topk_explained": explained,
+        "target_trace": st["trace"], "prediction_trace": sp["trace"],
+        "target_top_eig": st["top"], "prediction_top_eig": sp["top"],
+        "target_erank": st["erank"], "prediction_erank": sp["erank"],
+    }
+
+def replication_metrics(target, audit):
+    m = covariance_metrics(target, audit)
+    st, sa = spectral_summary(target), spectral_summary(audit)
+    m["trace_ratio_audit_over_target"] = float(sa["trace"] / max(st["trace"], RIDGE_EPS))
+    m["spectrum_rel_error"] = float(np.linalg.norm(st["eigvals"] - sa["eigvals"]) /
+                                    max(np.linalg.norm(st["eigvals"]), RIDGE_EPS))
+    return m
+
+# ============================================================================
+# 3. Function-space Phi and deterministic reference paths.
+# ============================================================================
+def phi(model, probe_x, projection):
+    logits = model(probe_x).reshape(-1)
+    return (logits @ projection).detach().cpu().double().numpy()
+
+def phi_jacobian(model, probe_x, projection):
+    """Small dense J_Phi only (OBS_DIM x parameters); never a dense Hessian."""
+    params = tuple(model.parameters())
+    logits = model(probe_x).reshape(-1)
+    rows = []
+    for j in range(projection.shape[1]):
+        scalar = torch.dot(logits, projection[:, j])
+        g = torch.autograd.grad(scalar, params, retain_graph=(j + 1 < projection.shape[1]))
+        rows.append(torch.cat([a.reshape(-1) for a in g]).detach())
+    return torch.stack(rows).detach().cpu().double().numpy()
+
+def deterministic_path(theta0, eta, train_x, train_y, probe_x, projection):
+    model = new_model(DTYPE); set_flat(model, theta0)
+    theta, phis, jacobians = [flat_params(model).cpu().double().numpy()], [], []
+    for t in range(HMAX + 1):
+        phis.append(phi(model, probe_x, projection))
+        jacobians.append(phi_jacobian(model, probe_x, projection))
+        if t < HMAX:
+            g = grad_vec(model, train_x, train_y)
+            set_flat(model, flat_params(model) - eta * g)
+            theta.append(flat_params(model).cpu().double().numpy())
+    return np.stack(theta), np.stack(phis), np.stack(jacobians)
+
+# ============================================================================
+# 4. Local gradient-noise banks and matrix-free covariance propagation.
+#
+# Scaling convention (checked again in scaling_audit.md): a stored bank element
+# is z_i = g_i - mean(g_i), an estimate of one-example gradient noise.  A
+# synthetic i.i.d. minibatch noise is zeta_B = B^{-1} sum_i z_i.  Thus its
+# covariance has exactly one factor 1/B.  Tangent updates add -eta*zeta_B,
+# so eta^2 enters once through the propagated increments.
+# ============================================================================
+def local_noise_bank(theta_path, train_x, train_y, n_samples, key):
+    """Measure centered one-example gradient deviations at every GD time."""
+    rng = np.random.default_rng(seed_of("local-noise", *key))
+    model = new_model(DTYPE)
+    banks, means, rel_means, energies, ids = [], [], [], [], []
+    ntrain = len(train_x)
+    for t, theta in enumerate(theta_path):
+        set_flat(model, torch.from_numpy(theta))
+        full = grad_vec(model, train_x, train_y).detach()
+        sampled = rng.integers(0, ntrain, size=n_samples)
+        raw = []
+        for i in sampled:
+            raw.append((grad_vec(model, train_x[i:i+1], train_y[i:i+1]).detach() - full).cpu().double().numpy())
+        raw = np.stack(raw)
+        centered = raw - raw.mean(axis=0, keepdims=True)
+        energy = float(np.mean(np.sum(centered * centered, axis=1)))
+        rel_mean = float(np.linalg.norm(raw.mean(axis=0)) / max(np.sqrt(np.mean(np.sum(raw * raw, axis=1))), RIDGE_EPS))
+        banks.append(centered)
+        means.append(full.cpu().double().numpy())
+        rel_means.append(rel_mean); energies.append(energy); ids.append(sampled)
+        log(f"local noise measured {key}, t={t}/{HMAX}, energy={energy:.3e}, rel-mean={rel_mean:.3e}")
+    return np.stack(banks), np.stack(means), np.asarray(rel_means), np.asarray(energies), np.stack(ids)
+
+def batched_noise(bank_t, batch, rng):
+    """One i.i.d.-with-replacement minibatch gradient-noise draw."""
+    choose = rng.integers(0, bank_t.shape[0], size=int(batch))
+    return bank_t[choose].mean(axis=0)
+
+def cov_from_draws(draws):
+    return covariance(np.asarray(draws, dtype=np.float64))
+
+def propagate_covariances(theta_path, jacobians, banks, energies, eta, batch, key, train_x, train_y):
+    """Matrix-free tangent Monte Carlo.  This is the frozen zero-fit predictor."""

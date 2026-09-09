@@ -1,0 +1,146 @@
+                    if valid_complete(rp):
+                        z = np.load(rp, allow_pickle=False)
+                        if str(z["prediction_csv_sha256"].item()) != p_hash: die("Raw block is bound to a different prediction freeze.")
+                        continue
+                    delta_phi = nonlinear_pool(theta0, gd_phi, eta, batch, ntraj, pool, (seed, fraction, eta), x, y, probe, projection)
+                    save_complete_npz(rp, delta_phi=delta_phi, horizons=np.asarray(C["horizons"]), seed=np.array(seed), fraction=np.array(fraction), eta=np.array(eta), B=np.array(batch), pool=np.array(pool), prediction_csv_sha256=np.array(p_hash))
+                    mirror_complete(rp); log(f"completed {rp.name}")
+                    gc.collect();
+                    if torch.cuda.is_available(): torch.cuda.empty_cache()
+
+    # Independent covariance replication, then frozen-predictor evaluation.
+    rows, reps, observed_arrays = [], [], {}
+    frozen = np.load(PFN, allow_pickle=False)
+    for s in states:
+        seed, fraction = int(s["seed"]), float(s["fraction"])
+        for eta in C["etas"]:
+            for batch in C["batches"]:
+                t = np.load(RAW / raw_tag(seed, fraction, eta, batch, "TARGET"), allow_pickle=False)["delta_phi"]
+                a = np.load(RAW / raw_tag(seed, fraction, eta, batch, "AUDIT"), allow_pickle=False)["delta_phi"]
+                for hi, h in enumerate(C["horizons"]):
+                    ct, ca = covariance(t[:, hi]), covariance(a[:, hi]); key = f"s{seed}_f{frac_tag(fraction)}_e{eta_tag(eta)}_B{batch}_H{h}"
+                    observed_arrays[f"T_{key}"] = ct; observed_arrays[f"A_{key}"] = ca
+                    cp, cb0, cb1, cb2 = frozen[f"C_P_{key}"], frozen[f"C_B0_{key}"], frozen[f"C_B1_{key}"], frozen[f"C_B2_{key}"]
+                    rep = replication_metrics(ct, ca); main = covariance_metrics(ct, cp); b0 = covariance_metrics(ct, cb0); b1 = covariance_metrics(ct, cb1); b2 = covariance_metrics(ct, cb2)
+                    base = {"seed": seed, "fraction": fraction, "eta": eta, "B": batch, "H": h, "matrix_key": key,
+                            "target_mean_norm": float(np.linalg.norm(t[:, hi].mean(axis=0))), "audit_mean_norm": float(np.linalg.norm(a[:, hi].mean(axis=0)))}
+                    # Prefixes keep all matrix-level quantities explicit and avoid a mean-of-ratios analysis.
+                    base.update({"rep_" + k: v for k, v in rep.items()})
+                    base.update({"main_" + k: v for k, v in main.items()})
+                    for label, metric in (("B0", b0), ("B1", b1), ("B2", b2)):
+                        base.update({label + "_" + k: v for k, v in metric.items()})
+                    energy = float(pred_df[(pred_df.seed == seed) & (np.isclose(pred_df.fraction, fraction)) & (np.isclose(pred_df.eta, eta)) & (pred_df.B == batch) & (pred_df.H == h)].iloc[0].B3_scalar_param_variance)
+                    base["B3_scalar_param_variance"] = energy
+                    rows.append(base); reps.append({k: base[k] for k in base if k.startswith("rep_") or k in ("seed", "fraction", "eta", "B", "H")})
+    results = pd.DataFrame(rows); replication = pd.DataFrame(reps)
+    results.to_csv(OUT / "condition_results.csv", index=False); replication.to_csv(OUT / "covariance_replication.csv", index=False)
+    mirror_file(OUT / "condition_results.csv"); mirror_file(OUT / "covariance_replication.csv")
+    atomic_npz(OUT / "observed_covariances.npz", **observed_arrays); mirror_file(OUT / "observed_covariances.npz")
+
+    # Equal-condition summaries within each network seed: scientific seed is the bootstrap unit.
+    seed_summary = results.groupby(["seed", "H"], as_index=False).agg(
+        main_fro_skill=("main_fro_skill", "mean"), main_matrix_cosine=("main_matrix_cosine", "mean"), main_trace_rel_error=("main_trace_rel_error", "mean"),
+        main_top_eig_rel_error=("main_top_eig_rel_error", "mean"), main_top1_overlap=("main_top1_overlap", "mean"),
+        B0_fro_skill=("B0_fro_skill", "mean"), B1_fro_skill=("B1_fro_skill", "mean"), B2_fro_skill=("B2_fro_skill", "mean"),
+        rep_matrix_cosine=("rep_matrix_cosine", "mean"), rep_fro_error=("rep_fro_error", "mean"), rep_trace_ratio=("rep_trace_ratio_audit_over_target", "mean"),
+    )
+    seed_summary.to_csv(OUT / "seed_summary.csv", index=False); mirror_file(OUT / "seed_summary.csv")
+    horizon_summary = results.groupby("H", as_index=False).agg(
+        n_conditions=("seed", "size"), rep_cosine_median=("rep_matrix_cosine", "median"), rep_fro_median=("rep_fro_error", "median"), rep_trace_ratio_median=("rep_trace_ratio_audit_over_target", "median"),
+        main_skill_mean=("main_fro_skill", "mean"), main_skill_median=("main_fro_skill", "median"), main_cosine_mean=("main_matrix_cosine", "mean"),
+        main_trace_error_mean=("main_trace_rel_error", "mean"), main_top_eig_error_mean=("main_top_eig_rel_error", "mean"), main_overlap_mean=("main_top1_overlap", "mean"),
+    )
+    horizon_summary.to_csv(OUT / "horizon_summary.csv", index=False); mirror_file(OUT / "horizon_summary.csv")
+    base_rows, boot_rows = [], []
+    for h in C["horizons"]:
+        ss = seed_summary[seed_summary.H == h].sort_values("seed")
+        for label in ("B0", "B1", "B2"):
+            delta = ss.main_fro_skill.to_numpy() - ss[f"{label}_fro_skill"].to_numpy()
+            stat = seed_bootstrap(delta, C["bootstrap_draws"], seed_of("bootstrap", h, label))
+            base_rows.append({"H": h, "baseline": label, "metric": "fro_skill", "delta_mean": stat["mean"], "delta_ci_low": stat["ci_low"], "delta_ci_high": stat["ci_high"], "n_seeds": stat["n_seeds"]})
+            boot_rows.append({"H": h, "quantity": f"C_pred_minus_{label}_fro_skill", **stat})
+        for metric in ("main_fro_skill", "main_matrix_cosine", "main_trace_rel_error", "main_top_eig_rel_error", "main_top1_overlap", "rep_matrix_cosine", "rep_fro_error"):
+            stat = seed_bootstrap(ss[metric].to_numpy(), C["bootstrap_draws"], seed_of("bootstrap", h, metric)); boot_rows.append({"H": h, "quantity": metric, **stat})
+    # Scalar B3 is ranking-only, as preregistered.
+    for h in C["horizons"]:
+        q = results[results.H == h]
+        rho, pval = spearmanr(q["B3_scalar_param_variance"], q["main_target_trace"], nan_policy="omit")
+        base_rows.append({"H": h, "baseline": "B3", "metric": "Spearman(B3 scalar, TARGET trace)", "delta_mean": float(rho), "delta_ci_low": np.nan, "delta_ci_high": np.nan, "n_seeds": len(C["seeds"]), "pvalue": float(pval)})
+    baseline, bootstrap = pd.DataFrame(base_rows), pd.DataFrame(boot_rows)
+    baseline.to_csv(OUT / "baseline_comparison.csv", index=False); bootstrap.to_csv(OUT / "bootstrap_summary.csv", index=False)
+    mirror_file(OUT / "baseline_comparison.csv"); mirror_file(OUT / "bootstrap_summary.csv")
+
+    # Preregistered decision logic. H=10 is mandatory in full; smoke is explicitly non-scientific.
+    if RUN_MODE == "smoke":
+        diagnosis = "SMOKE ONLY — NO SCIENTIFIC CLAIM"; advance = "NO"
+    else:
+        h10 = int(10); hh = horizon_summary[horizon_summary.H == h10].iloc[0]
+        bb = baseline[baseline.H == h10].set_index("baseline")
+        bs = bootstrap[bootstrap.H == h10].set_index("quantity")
+        numeric_result_values = results.select_dtypes(include=[np.number]).to_numpy(dtype=float, copy=True)
+        replicate = bool(hh.rep_cosine_median >= .8 and hh.rep_fro_median <= .5 and .5 <= hh.rep_trace_ratio_median <= 2 and np.isfinite(numeric_result_values).all())
+        main_ok = bool(hh.main_skill_mean >= .60 and hh.main_cosine_mean >= .85 and bs.loc["main_fro_skill", "ci_low"] > .30 and np.median(seed_summary[seed_summary.H == h10].main_fro_skill) > 0)
+        beat_b2 = bool(bb.loc["B2", "delta_ci_low"] > 0)
+        beat_b0 = bool(bb.loc["B0", "delta_ci_low"] > 0)
+        frozen_indistinguishable = bool(bb.loc["B1", "delta_ci_low"] <= 0 <= bb.loc["B1", "delta_ci_high"])
+        weak_but_positive = bool(hh.main_skill_mean > .30 and hh.main_cosine_mean >= .70 and bs.loc["main_fro_skill", "ci_low"] > 0)
+        if not replicate: diagnosis, advance = "M4", "NO"
+        elif main_ok and beat_b2 and beat_b0: diagnosis, advance = "M1", "YES"
+        elif weak_but_positive and frozen_indistinguishable: diagnosis, advance = "M2", "YES"
+        else: diagnosis, advance = "M3", "NO"
+    answers = {
+        "prediction freeze passed": "YES", "fresh scientific data": "YES",
+        "TARGET/AUDIT covariance replication at H=1": "N/A" if 1 not in C["horizons"] else str(bool((horizon_summary[horizon_summary.H == 1].rep_cosine_median.iloc[0] >= .8))),
+        "at H=5": "N/A" if 5 not in C["horizons"] else str(bool((horizon_summary[horizon_summary.H == 5].rep_cosine_median.iloc[0] >= .8))),
+        "at H=10": "N/A in smoke" if RUN_MODE == "smoke" else str(diagnosis != "M4"),
+        "C_pred H=10 Frobenius skill + seed-bootstrap CI": "N/A in smoke" if RUN_MODE == "smoke" else str(bootstrap[(bootstrap.H == 10) & (bootstrap.quantity == "main_fro_skill")][["mean", "ci_low", "ci_high"]].to_dict("records")),
+        "matrix cosine / trace error / top-eigenvalue error / top-eigenspace overlap": "See horizon_summary.csv and condition_results.csv",
+        "equal-seed mean/median": "See seed_summary.csv and horizon_summary.csv",
+        "seed energy/variance concentration": "See local_noise_diagnostics.csv",
+        "no-propagation, frozen-geometry, isotropic, GNS baselines": "See baseline_comparison.csv",
+        "horizon degradation": "See horizon_summary.csv and figures/06_horizon_degradation.png",
+        "should advance to temporally correlated minibatch sampling": advance,
+    }
+    allowed = ("No scientific claim in smoke." if RUN_MODE == "smoke" else
+               ("In this tested small-network i.i.d.-minibatch regime, finite-horizon covariance can be predicted zero-fit from local anisotropic gradient noise propagated through deterministic geometry." if diagnosis == "M1" else
+                "Only the verdict-specific limited interpretation in decision.json is allowed; no broader stochastic-dynamics claim is justified."))
+    forbidden = "No claims about random reshuffling, temporal noise memory, non-Markovian SGD, optimizer memory, universality, large-model validity, generalization, or optimal batch size."
+    decision = {"diagnosis": diagnosis, "run_mode": RUN_MODE, "answers": answers, "allowed_claim": allowed, "forbidden_claims": forbidden, "completed_utc": utc()}
+    write_reports(results, replication, seed_summary, horizon_summary, baseline, bootstrap, decision, provenance)
+    make_figures(results, seed_summary, baseline)
+    # Final manifest and ZIP must include the reports and raw arrays.  Verify the ZIP before Drive copy.
+    atomic_json(OUT / "environment.json", {"python": platform.python_version(), "torch": torch.__version__, "cuda": torch.cuda.is_available(), "device": str(DEVICE), "numpy": np.__version__, "pandas": pd.__version__})
+    atomic_json(OUT / "artifact_manifest.json", archive_manifest(OUT))
+    mirror_tree()
+    zip_local = RUN_ROOT / f"{OUT.name}_results.zip"
+    with zipfile.ZipFile(zip_local, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
+        for p in sorted(OUT.rglob("*")):
+            if p.is_file(): zf.write(p, p.relative_to(OUT.parent))
+    with zipfile.ZipFile(zip_local, "r") as zf:
+        if zf.testzip() is not None: die("Final ZIP integrity test failed.")
+    zip_drive = DRIVE_ROOT / zip_local.name; atomic_copy(zip_local, zip_drive)
+    log(f"FINAL DIAGNOSIS: {diagnosis}")
+    log(f"Result folder: {OUT_DRIVE}")
+    log(f"ZIP: {zip_drive}")
+
+try:
+    main()
+except Exception as exc:
+    # Fail closed: an interrupted or numerically invalid run never prints a scientific claim.
+    failure = {"diagnosis": "M5", "time_utc": utc(), "error": repr(exc), "traceback": traceback.format_exc()}
+    print("M5 — PROTOCOL / NUMERICAL FAILURE. No scientific conclusion is justified.", flush=True)
+    print(failure["traceback"], flush=True)
+    if OUT is not None:
+        try:
+            atomic_json(OUT / "environment_failure.json", failure); mirror_file(OUT / "environment_failure.json"); mirror_tree()
+            atomic_json(OUT / "decision.json", failure)
+            atomic_text(OUT / "decision_report.md", "FINAL DIAGNOSIS: M5\n\nPROTOCOL / NUMERICAL FAILURE. No scientific conclusion is justified.\n")
+            mirror_file(OUT / "decision.json"); mirror_file(OUT / "decision_report.md")
+            fail_zip = RUN_ROOT / f"{OUT.name}_FAILED.zip"
+            with zipfile.ZipFile(fail_zip, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
+                for p in sorted(OUT.rglob("*")):
+                    if p.is_file(): zf.write(p, p.relative_to(OUT.parent))
+            if OUT_DRIVE is not None: atomic_copy(fail_zip, DRIVE_ROOT / fail_zip.name)
+        except Exception as archive_exc:
+            print(f"Failure archive could not be completed: {archive_exc!r}", flush=True)
+    raise

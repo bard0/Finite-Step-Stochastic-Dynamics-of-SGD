@@ -1,0 +1,180 @@
+# Stage M1 — finite-horizon covariance under i.i.d. minibatching
+# Zero-fit finite-horizon covariance prediction under i.i.d. minibatching.
+# Public runnable version derived from the archived experiment source.
+
+import os, io, re, gc, json, math, time, shutil, zipfile, hashlib, platform, traceback
+from pathlib import Path
+from datetime import datetime, timezone
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+# some Python environments can install a SymPy build where ``printing`` is a
+# valid submodule but is not exposed as ``sympy.printing`` until imported.  New
+# PyTorch releases inspect that attribute while importing ``torch``.  Importing
+# the public submodule first is a no-op on ordinary Python environments and avoids the
+# otherwise unrelated torchvision import crash shown by this environment.
+try:
+    import sympy.printing  # noqa: F401
+except Exception:
+    pass
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torchvision import datasets, transforms
+from scipy.linalg import subspace_angles
+from scipy.stats import spearmanr
+
+# ============================================================================
+# 0. PREREGISTERED CONFIGURATION — change RUN_MODE only after a smoke run.
+# ============================================================================
+RUN_MODE = "full" # manually change to "full"
+RESUME = True
+MASTER_SEED = 20260904
+PROTOCOL_VERSION = "M1-iid-covariance-v1"
+DRIVE_ROOT = Path(os.environ.get("SGD_PROJECT_ROOT", "./artifacts")).expanduser().resolve()
+RUN_ROOT = Path(os.environ.get("SGD_RUN_ROOT", "./runs")).expanduser().resolve()
+DATA_ROOT = Path(os.environ.get("SGD_DATA_ROOT", "./data")).expanduser().resolve()
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+DTYPE = torch.float64
+OBS_DIM = 5                 # same small projected-logit scale as Stage 3K/3L
+PROBE_N = 12
+DATASET_N = 256
+TOP_K = 3
+RIDGE_EPS = 1e-30
+
+MODE = {
+    "smoke": dict(
+        seeds=(51,), fractions=(0.30,), etas=(0.05,), batches=(32, 128),
+        horizons=(1, 5), train_steps=60, train_batch=32,
+        n_target=16, n_audit=16, local_noise_samples=32,
+        tangent_draws=16, bootstrap_draws=200, hutch_draws=4,
+    ),
+    "full": dict(
+        seeds=(51, 52, 53, 54, 55, 56), fractions=(0.25, 0.55, 0.85),
+        etas=(0.025, 0.05, 0.075, 0.10), batches=(16, 32, 64, 128, 256, 512),
+        horizons=(1, 5, 10), train_steps=240, train_batch=32,
+        n_target=128, n_audit=128, local_noise_samples=256,
+        # 64 independent tangent-noise sequences are a matrix-free covariance
+        # approximation; this is deliberately separate from the 256 local
+        # gradient-noise measurements required by the protocol.
+        tangent_draws=64, bootstrap_draws=5000, hutch_draws=8,
+    ),
+}
+if RUN_MODE not in MODE:
+    raise ValueError("RUN_MODE must be 'smoke' or 'full'.")
+C = MODE[RUN_MODE]
+HMAX = max(C["horizons"])
+if not set(C["horizons"]).issubset(set(range(1, HMAX + 1))):
+    raise ValueError("HORIZONS must be positive integer steps.")
+
+# ============================================================================
+# 1. Infrastructure: deterministic seeds, atomic checkpoints, Drive mirroring.
+# ============================================================================
+class ProtocolStop(RuntimeError):
+    pass
+
+def utc():
+    return datetime.now(timezone.utc).isoformat()
+
+def log(message):
+    print(f"[{utc()}] {message}", flush=True)
+
+def die(message):
+    raise ProtocolStop(message)
+
+def seed_of(*parts):
+    text = "|".join(map(str, (MASTER_SEED, PROTOCOL_VERSION, RUN_MODE) + parts))
+    return int(hashlib.sha256(text.encode("utf-8")).hexdigest()[:16], 16) % (2**63 - 1)
+
+def set_seed(seed):
+    np.random.seed(seed % (2**32 - 1))
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+def json_default(x):
+    if isinstance(x, Path): return str(x)
+    if isinstance(x, np.ndarray): return x.tolist()
+    if isinstance(x, (np.integer,)): return int(x)
+    if isinstance(x, (np.floating,)): return float(x)
+    if isinstance(x, (np.bool_,)): return bool(x)
+    raise TypeError(f"Cannot JSON encode {type(x)}")
+
+def sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+def atomic_text(path, text):
+    path = Path(path); path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(text); f.flush(); os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+def atomic_json(path, value):
+    atomic_text(path, json.dumps(value, indent=2, ensure_ascii=False, default=json_default))
+
+def atomic_npz(path, **arrays):
+    path = Path(path); path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.stem + ".tmp.npz")
+    np.savez_compressed(tmp, **arrays)
+    with open(tmp, "rb") as f: os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+def completion_path(path):
+    return Path(str(path) + ".completion.json")
+
+def save_complete_npz(path, **arrays):
+    atomic_npz(path, **arrays)
+    atomic_json(completion_path(path), {"sha256": sha256(path), "completed_utc": utc()})
+
+def valid_complete(path):
+    path = Path(path); marker = completion_path(path)
+    try:
+        return path.exists() and marker.exists() and json.loads(marker.read_text())["sha256"] == sha256(path)
+    except Exception:
+        return False
+
+def atomic_copy(src, dst):
+    src, dst = Path(src), Path(dst); dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dst.with_name(dst.name + ".tmp")
+    shutil.copy2(src, tmp)
+    with open(tmp, "rb") as f: os.fsync(f.fileno())
+    os.replace(tmp, dst)
+
+OUT = None
+OUT_DRIVE = None
+
+def mirror_file(local_path):
+    """Copy one completed local artifact to Drive atomically."""
+    local_path = Path(local_path)
+    if OUT is None or OUT_DRIVE is None or not local_path.exists(): return
+    remote = OUT_DRIVE / local_path.relative_to(OUT)
+    if not remote.exists() or sha256(local_path) != sha256(remote):
+        atomic_copy(local_path, remote)
+
+def mirror_complete(path):
+    mirror_file(path)
+    marker = completion_path(path)
+    if marker.exists(): mirror_file(marker)
+
+def mirror_tree():
+    for p in sorted(OUT.rglob("*")):
+        if p.is_file(): mirror_file(p)
+
+def frac_tag(x): return str(float(x)).replace(".", "p")
+def eta_tag(x): return str(float(x)).replace(".", "p")
+def state_tag(seed, fraction): return f"seed{seed}_fraction{frac_tag(fraction)}"
+def path_tag(seed, fraction, eta): return f"{state_tag(seed, fraction)}_eta{eta_tag(eta)}"
+def raw_tag(seed, fraction, eta, batch, pool):
+    return f"{path_tag(seed, fraction, eta)}_B{int(batch)}_{pool}.npz"
+
+def tensor_rng_indices(rng, n, batch):
+    return torch.tensor(rng.integers(0, n, size=int(batch)), device=DEVICE, dtype=torch.long)
+
+# ============================================================================
+# 2. Exact small-network family from the prior Stage 3K/3L family.

@@ -1,0 +1,180 @@
+    for p in [OUT / "README.md", OUT / "scaling_audit.md", OUT / "code_audit_report.md", OUT / "decision.json", OUT / "decision_report.md"]: mirror_file(p)
+
+# ============================================================================
+# 7. Main pipeline.
+# ============================================================================
+def main():
+    global OUT, OUT_DRIVE, FIG, PFN
+    DRIVE_ROOT.mkdir(parents=True, exist_ok=True)
+    RUN_ROOT.mkdir(parents=True, exist_ok=True)
+    DATA_ROOT.mkdir(parents=True, exist_ok=True)
+    protocol = {"version": PROTOCOL_VERSION, "run_mode": RUN_MODE, "config": C, "master_seed": MASTER_SEED,
+                "architecture": "TinyCNN: Conv(3,8)-Tanh-AvgPool-Conv(8,12)-Tanh-AdaptiveAvgPool-Linear(12,10)",
+                "sampling": "i.i.d. minibatches with replacement"}
+    protocol_hash = hashlib.sha256(json.dumps(protocol, sort_keys=True, default=json_default).encode()).hexdigest()
+    active = DRIVE_ROOT / f"stage_m1_active_{RUN_MODE}.json"
+    if RESUME and active.exists():
+        a = json.loads(active.read_text())
+        if a.get("protocol_hash") != protocol_hash: die("Active M1 run has a different protocol hash; refusing mixed resume.")
+        run_id = a["run_id"]
+    else:
+        run_id = "stage_m1_finite_horizon_covariance_iid_" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        atomic_json(active, {"run_id": run_id, "protocol_hash": protocol_hash, "created_utc": utc()})
+    OUT = RUN_ROOT / run_id; OUT_DRIVE = DRIVE_ROOT / run_id
+    if RESUME and OUT_DRIVE.exists() and not OUT.exists(): shutil.copytree(OUT_DRIVE, OUT, dirs_exist_ok=True)
+    OUT.mkdir(parents=True, exist_ok=True)
+    for name in ("raw", "predictions", "local_noise", "deterministic", "checkpoints", "figures"):
+        (OUT / name).mkdir(exist_ok=True)
+    RAW, PRED_DIR, LOCAL_DIR, DET_DIR, CKPT_DIR = [OUT / x for x in ("raw", "predictions", "local_noise", "deterministic", "checkpoints")]
+    FIG = OUT / "figures"
+    log(f"RUN_MODE={RUN_MODE}; DEVICE={DEVICE}; RUN_ID={run_id}")
+    atomic_json(OUT / "configuration.json", protocol | {"protocol_hash": protocol_hash, "device_at_start": str(DEVICE), "started_utc": utc()})
+    atomic_json(OUT / "preregistration.json", {
+        "primary_target": "C_Phi_H=Cov(Phi(theta_H^SGD)-Phi(theta_H^GD))",
+        "predictor": "matrix-free tangent/HVP propagation of centered local one-example gradient-noise banks",
+        "prediction_freeze_before_target_audit": True,
+        "target_audit": "independent i.i.d.-with-replacement nonlinear SGD ensembles",
+        "bootstrap_unit": "network seed", "verdicts": ["M1", "M2", "M3", "M4", "M5"],
+        "no_stage3k_or_stage3l_scientific_target_audit_data_reused": True,
+    })
+    # Snapshot the public script used for this run.
+    source_text = Path(__file__).read_text(encoding="utf-8") if "__file__" in globals() else ""
+    atomic_text(OUT / "source_snapshot.py", source_text)
+    provenance = {
+        "fresh_scientific_data": True,
+        "prior_scientific_target_audit_arrays_read": False,
+        "public_source_sha256": sha256(OUT / "source_snapshot.py"),
+    }
+    atomic_text(OUT / "provenance_report.md", "# Provenance\n\n" + json.dumps(provenance, indent=2) + "\n")
+    for p in [OUT / "configuration.json", OUT / "preregistration.json", OUT / "source_snapshot.py", OUT / "provenance_report.md"]:
+        mirror_file(p)
+
+    # Fresh immutable data/probe/projection.  Partial inputs fail closed.
+    immutable = [OUT / "train_x.pt", OUT / "train_y.pt", OUT / "probe_x.pt", OUT / "projection.npy", OUT / "fixed_states.pt"]
+    if all(p.exists() for p in immutable):
+        x_cpu = torch.load(OUT / "train_x.pt", map_location="cpu"); y_cpu = torch.load(OUT / "train_y.pt", map_location="cpu")
+        probe_cpu = torch.load(OUT / "probe_x.pt", map_location="cpu"); projection = torch.tensor(np.load(OUT / "projection.npy"), device=DEVICE, dtype=DTYPE)
+        states = torch.load(OUT / "fixed_states.pt", map_location="cpu")
+        log("Loaded immutable fresh M1 dataset, probes, projection, and fixed states.")
+    else:
+        if any(p.exists() for p in immutable): die("Partial immutable M1 input set; refusing reconstruction.")
+        set_seed(seed_of("fresh-dataset"))
+        ds = datasets.CIFAR10(str(DATA_ROOT / "cifar10"), train=True, download=True, transform=transforms.ToTensor())
+        rng = np.random.default_rng(seed_of("fresh-data-indices")); all_idx = np.arange(len(ds))
+        train_idx = np.sort(rng.choice(all_idx, DATASET_N, replace=False)); remain = np.setdiff1d(all_idx, train_idx)
+        probe_idx = np.sort(rng.choice(remain, PROBE_N, replace=False))
+        x_cpu = torch.stack([ds[int(i)][0] for i in train_idx]); y_cpu = torch.tensor([ds[int(i)][1] for i in train_idx])
+        probe_cpu = torch.stack([ds[int(i)][0] for i in probe_idx])
+        proj_rng = np.random.default_rng(seed_of("fresh-projection"))
+        projection_np = proj_rng.normal(size=(PROBE_N * 10, OBS_DIM)) / math.sqrt(PROBE_N * 10)
+        projection = torch.tensor(projection_np, device=DEVICE, dtype=DTYPE)
+        for p, obj in [(OUT / "train_x.pt", x_cpu), (OUT / "train_y.pt", y_cpu), (OUT / "probe_x.pt", probe_cpu)]: torch.save(obj, p)
+        np.save(OUT / "train_indices.npy", train_idx); np.save(OUT / "probe_indices.npy", probe_idx); np.save(OUT / "projection.npy", projection_np)
+        # Deterministic full-gradient reference training; snapshots are immutable.
+        states = []
+        snapshot_steps = [max(1, int(round(f * C["train_steps"]))) for f in C["fractions"]]
+        x_train32, y_train = x_cpu.to(DEVICE), y_cpu.to(DEVICE)
+        for seed in C["seeds"]:
+            set_seed(seed_of("network", seed)); model = new_model(torch.float32)
+            snapshots, history = [], []
+            for step in range(1, C["train_steps"] + 1):
+                model.zero_grad(set_to_none=True); l = full_loss(model, x_train32, y_train); l.backward()
+                with torch.no_grad():
+                    for p in model.parameters(): p.add_(p.grad, alpha=-0.05)
+                history.append(float(l.detach().cpu()))
+                if step in snapshot_steps:
+                    snapshots.append((step, flat_params(model).cpu().double()))
+            if len(snapshots) != len(C["fractions"]): die("Fixed-state snapshot extraction failed.")
+            torch.save({"seed": seed, "loss_history": history, "snapshots": snapshots}, CKPT_DIR / f"reference_training_seed{seed}.pt")
+            for fraction, (step, theta) in zip(C["fractions"], snapshots):
+                states.append({"seed": int(seed), "fraction": float(fraction), "step": int(step), "theta": theta})
+        torch.save(states, OUT / "fixed_states.pt")
+        for p in [OUT / "train_x.pt", OUT / "train_y.pt", OUT / "probe_x.pt", OUT / "train_indices.npy", OUT / "probe_indices.npy", OUT / "projection.npy", OUT / "fixed_states.pt"]:
+            mirror_file(p)
+        for p in CKPT_DIR.glob("*.pt"): mirror_file(p)
+        log("Created fresh M1 dataset/probes/projection and immutable fixed states.")
+    expected_states = len(C["seeds"]) * len(C["fractions"])
+    if len(states) != expected_states: die("Fixed-state count conflicts with preregistered design.")
+    x, y, probe = x_cpu.to(DEVICE, DTYPE), y_cpu.to(DEVICE), probe_cpu.to(DEVICE, DTYPE)
+    fixed_rows = []
+    for s in states:
+        state_file = CKPT_DIR / f"{state_tag(s['seed'], s['fraction'])}_theta.pt"
+        if not state_file.exists():
+            state_model = new_model(DTYPE); set_flat(state_model, s["theta"])
+            torch.save({"theta": s["theta"], "model_state_dict": {k: v.detach().cpu() for k, v in state_model.state_dict().items()}}, state_file)
+            mirror_file(state_file)
+        fixed_rows.append({"seed": s["seed"], "fraction": s["fraction"], "training_step": s["step"], "theta_sha256": sha256(state_file)})
+    pd.DataFrame(fixed_rows).to_csv(OUT / "fixed_states_manifest.csv", index=False); mirror_file(OUT / "fixed_states_manifest.csv")
+
+    # Deterministic paths, local noise, and all prediction checkpoints: no TARGET/AUDIT calls here.
+    pred_rows, pred_arrays, local_rows = [], {}, []
+    for s in states:
+        seed, fraction, theta0 = int(s["seed"]), float(s["fraction"]), s["theta"].numpy()
+        for eta in C["etas"]:
+            tag = path_tag(seed, fraction, eta); dp = DET_DIR / f"{tag}.npz"; lp = LOCAL_DIR / f"{tag}.npz"; pp = PRED_DIR / f"{tag}.npz"
+            if valid_complete(dp):
+                d = np.load(dp, allow_pickle=False); theta_path, phi_gd, jacobians = d["theta_path"], d["phi_gd"], d["jacobians"]
+            else:
+                theta_path, phi_gd, jacobians = deterministic_path(theta0, eta, x, y, probe, projection)
+                save_complete_npz(dp, theta_path=theta_path, phi_gd=phi_gd, jacobians=jacobians, eta=np.array(eta), seed=np.array(seed), fraction=np.array(fraction)); mirror_complete(dp)
+            if valid_complete(lp):
+                z = np.load(lp, allow_pickle=False); banks = z["banks"]; rel_means, energies = z["relative_means"], z["energies"]
+            else:
+                banks, full_grads, rel_means, energies, ids = local_noise_bank(theta_path, x, y, C["local_noise_samples"], (seed, fraction, eta))
+                save_complete_npz(lp, banks=banks, full_grads=full_grads, relative_means=rel_means, energies=energies, sampled_indices=ids,
+                                  seed=np.array(seed), fraction=np.array(fraction), eta=np.array(eta), convention=np.array("centered one-example noise")); mirror_complete(lp)
+            for t in range(HMAX + 1):
+                local_rows.append({"seed": seed, "fraction": fraction, "eta": eta, "t": t, "noise_energy_single": float(energies[t]), "relative_noise_mean": float(rel_means[t]), "n_samples": C["local_noise_samples"]})
+            if valid_complete(pp):
+                z = np.load(pp, allow_pickle=False)
+                # Scalar rows are reconstructed from the immutable prediction checkpoint.
+                for r in json.loads(str(z["rows_json"].item())): pred_rows.append(r)
+                for key in z.files:
+                    if key.startswith("C_"): pred_arrays[key] = z[key]
+            else:
+                rows, arrays = [], {}
+                for batch in C["batches"]:
+                    cs = propagate_covariances(theta_path, jacobians, banks, energies, eta, batch, (seed, fraction, eta), x, y)
+                    for h in C["horizons"]:
+                        basekey = f"s{seed}_f{frac_tag(fraction)}_e{eta_tag(eta)}_B{batch}_H{h}"
+                        arrays[f"C_P_{basekey}"] = cs["main"][h]; arrays[f"C_B0_{basekey}"] = cs["B0"][h]; arrays[f"C_B1_{basekey}"] = cs["B1"][h]; arrays[f"C_B2_{basekey}"] = cs["B2"][h]
+                        sm = spectral_summary(cs["main"][h]); b0 = spectral_summary(cs["B0"][h]); b1 = spectral_summary(cs["B1"][h]); b2 = spectral_summary(cs["B2"][h])
+                        # B3 is scalar parameter-space variance only; it is not coerced into a covariance matrix.
+                        b3 = float(h * eta * eta * np.mean(energies[:h]) / batch)
+                        rows.append({"seed": seed, "fraction": fraction, "eta": eta, "B": int(batch), "H": int(h), "matrix_key": basekey,
+                                     "pred_trace": sm["trace"], "pred_fro": sm["fro"], "pred_top_eig": sm["top"], "pred_erank": sm["erank"], "pred_anisotropy": float(sm["top"] / max(sm["trace"], RIDGE_EPS)), "pred_diag": json.dumps(np.diag(cs["main"][h]).tolist()),
+                                     "B0_trace": b0["trace"], "B1_trace": b1["trace"], "B2_trace": b2["trace"], "B3_scalar_param_variance": b3,
+                                     "eta_over_B": float(eta / batch), "local_noise_energy_mean": float(np.mean(energies[:h])), "eta2_B_scaled_energy_identity": float(eta * eta * np.mean(energies[:h])), "tangent_draws": C["tangent_draws"]})
+                rows_json = json.dumps(rows, default=json_default)
+                save_complete_npz(pp, rows_json=np.array(rows_json), **arrays); mirror_complete(pp)
+                pred_rows.extend(rows); pred_arrays.update(arrays)
+            log(f"prediction checkpoint verified {tag}")
+            gc.collect();
+            if torch.cuda.is_available(): torch.cuda.empty_cache()
+    pd.DataFrame(local_rows).to_csv(OUT / "local_noise_diagnostics.csv", index=False); mirror_file(OUT / "local_noise_diagnostics.csv")
+    pred_df = pd.DataFrame(pred_rows).drop_duplicates(subset=["seed", "fraction", "eta", "B", "H"], keep="last").sort_values(["seed", "fraction", "eta", "B", "H"])
+    if len(pred_df) != expected_states * len(C["etas"]) * len(C["batches"]) * len(C["horizons"]): die("Prediction-freeze row count is incomplete.")
+    PFC = OUT / "predictions_frozen.csv"; PFN = OUT / "predictions_frozen.npz"; PFJ = OUT / "prediction_freeze.json"; PFH = OUT / "predictions_frozen_sha256.txt"
+    raw_before_freeze = list(RAW.glob("*.npz"))
+    if not PFC.exists():
+        if raw_before_freeze: die("Prediction freeze violation: raw TARGET/AUDIT files precede the freeze.")
+        pred_df.to_csv(PFC, index=False); atomic_npz(PFN, **pred_arrays)
+        p_hash = sha256(PFC); atomic_json(PFJ, {"frozen_utc": utc(), "predictions_csv_sha256": p_hash, "raw_files_before_freeze": 0, "immutable": True, "protocol_hash": protocol_hash})
+        atomic_text(PFH, p_hash + "  predictions_frozen.csv\n")
+        for p in [PFC, PFN, PFJ, PFH]: mirror_file(p)
+        log("Prediction freeze written and mirrored before first TARGET/AUDIT rollout.")
+    else:
+        if not (PFN.exists() and PFJ.exists() and PFH.exists()): die("Incomplete prediction-freeze artifact set.")
+        meta = json.loads(PFJ.read_text()); h = sha256(PFC)
+        if meta.get("predictions_csv_sha256") != h or h not in PFH.read_text(): die("Prediction freeze hash mismatch.")
+        log("Immutable prediction freeze hash verified.")
+
+    # Only now is nonlinear scientific TARGET/AUDIT data permitted.
+    p_hash = sha256(PFC)
+    for s in states:
+        seed, fraction, theta0 = int(s["seed"]), float(s["fraction"]), s["theta"].numpy()
+        for eta in C["etas"]:
+            d = np.load(DET_DIR / f"{path_tag(seed, fraction, eta)}.npz", allow_pickle=False); gd_phi = d["phi_gd"]
+            for batch in C["batches"]:
+                for pool, ntraj in (("TARGET", C["n_target"]), ("AUDIT", C["n_audit"])):
+                    rp = RAW / raw_tag(seed, fraction, eta, batch, pool)

@@ -1,0 +1,180 @@
+    d = theta_path.shape[1]
+    hset = set(C["horizons"])
+    outputs = {"main": {h: [] for h in C["horizons"]},
+               "B0": {h: [] for h in C["horizons"]},
+               "B1": {h: [] for h in C["horizons"]},
+               "B2": {h: [] for h in C["horizons"]}}
+    rng = np.random.default_rng(seed_of("tangent-prediction", *key, int(batch)))
+    model_moving, model_frozen = new_model(DTYPE), new_model(DTYPE)
+    # Each draw is a synthetic sequence from the *premeasured* local bank;
+    # it is not a nonlinear SGD trajectory and therefore cannot leak TARGET data.
+    for draw in range(C["tangent_draws"]):
+        v_main = np.zeros(d, dtype=np.float64)
+        v_frozen = np.zeros(d, dtype=np.float64)
+        v_iso = np.zeros(d, dtype=np.float64)
+        for t in range(HMAX):
+            z_main = batched_noise(banks[t], batch, rng)
+            z_frozen = batched_noise(banks[0], batch, rng)
+            z_iso = rng.normal(0.0, math.sqrt(max(energies[t], 0.0) / max(d * batch, 1)), size=d)
+            set_flat(model_moving, torch.from_numpy(theta_path[t]))
+            hv_main = loss_hvp(model_moving, train_x, train_y, torch.from_numpy(v_main).to(DEVICE)).detach().cpu().numpy()
+            v_main = v_main - eta * hv_main - eta * z_main
+            set_flat(model_frozen, torch.from_numpy(theta_path[0]))
+            hv_frozen = loss_hvp(model_frozen, train_x, train_y, torch.from_numpy(v_frozen).to(DEVICE)).detach().cpu().numpy()
+            hv_iso = loss_hvp(model_frozen, train_x, train_y, torch.from_numpy(v_iso).to(DEVICE)).detach().cpu().numpy()
+            v_frozen = v_frozen - eta * hv_frozen - eta * z_frozen
+            v_iso = v_iso - eta * hv_iso - eta * z_iso
+            h = t + 1
+            if h in hset:
+                j = jacobians[h]
+                outputs["main"][h].append(j @ v_main)
+                outputs["B1"][h].append(j @ v_frozen)
+                outputs["B2"][h].append(j @ v_iso)
+                # B0: final local noise only, no accumulated propagation.
+                z_final = batched_noise(banks[h], batch, rng)
+                outputs["B0"][h].append(-eta * (j @ z_final))
+    return {name: {h: cov_from_draws(values) for h, values in by_h.items()} for name, by_h in outputs.items()}
+
+# ============================================================================
+# 5. True nonlinear SGD TARGET/AUDIT pools.  These are called only after the
+#    complete frozen-prediction artifact has been hash-verified.
+# ============================================================================
+def nonlinear_pool(theta0, gd_phi, eta, batch, ntraj, label, key, train_x, train_y, probe_x, projection):
+    rng = np.random.default_rng(seed_of("nonlinear-pool", label, *key, int(batch)))
+    out = np.zeros((ntraj, len(C["horizons"]), OBS_DIM), dtype=np.float64)
+    hindex = {h: i for i, h in enumerate(C["horizons"])}
+    for r in range(ntraj):
+        model = new_model(DTYPE); set_flat(model, theta0)
+        for t in range(1, HMAX + 1):
+            ii = tensor_rng_indices(rng, len(train_x), batch)
+            # Crucial: the batch gradient is recomputed at current stochastic theta.
+            g = grad_vec(model, train_x[ii], train_y[ii])
+            set_flat(model, flat_params(model) - eta * g)
+            if t in hindex:
+                out[r, hindex[t]] = phi(model, probe_x, projection) - gd_phi[t]
+    return out
+
+def archive_manifest(root):
+    return {"generated_utc": utc(), "files": [
+        {"path": str(p.relative_to(root)), "bytes": int(p.stat().st_size), "sha256": sha256(p)}
+        for p in sorted(root.rglob("*")) if p.is_file() and not p.name.endswith(".zip")
+    ]}
+
+# ============================================================================
+# 6. Analysis, seed bootstrap, verdicts, and diagnostics-only figures.
+# ============================================================================
+def seed_bootstrap(values_by_seed, draws, seed):
+    """Network seed is the only scientific bootstrap resampling unit."""
+    vals = np.asarray(values_by_seed, dtype=np.float64)
+    vals = vals[np.isfinite(vals)]
+    if len(vals) == 0: return dict(mean=np.nan, ci_low=np.nan, ci_high=np.nan, n_seeds=0)
+    rng = np.random.default_rng(seed)
+    means = np.mean(vals[rng.integers(0, len(vals), size=(int(draws), len(vals)))], axis=1)
+    return dict(mean=float(np.mean(vals)), ci_low=float(np.quantile(means, .025)),
+                ci_high=float(np.quantile(means, .975)), n_seeds=int(len(vals)))
+
+def save_figure(name):
+    path = FIG / name
+    plt.tight_layout(); plt.savefig(path, dpi=160, bbox_inches="tight"); plt.close()
+    mirror_file(path)
+
+def make_figures(results, seed_summary, baseline):
+    if results.empty: return
+    hs = list(C["horizons"])
+    # 1. TARGET/AUDIT covariance cosine by H.
+    plt.figure(figsize=(7, 4));
+    for h in hs:
+        a = results.loc[results.H == h, "rep_matrix_cosine"].dropna().to_numpy()
+        plt.scatter(np.full(len(a), h), a, alpha=.55)
+        if len(a): plt.plot(h, np.median(a), "ks")
+    plt.axhline(.8, color="tab:red", ls="--", lw=1); plt.xlabel("Horizon H"); plt.ylabel("TARGET–AUDIT covariance cosine")
+    plt.title("Covariance replication (points=conditions, square=median)"); save_figure("01_target_audit_covariance_cosine.png")
+    # 2/3. Predicted vs target trace/top eigenvalue.
+    for target_field, prediction_field, label, fname in [
+        ("main_target_trace", "main_prediction_trace", "trace", "02_predicted_vs_target_trace.png"),
+        ("main_target_top_eig", "main_prediction_top_eig", "top eigenvalue", "03_predicted_vs_target_top_eigenvalue.png"),
+    ]:
+        plt.figure(figsize=(5, 5)); x = results[target_field].to_numpy(); y = results[prediction_field].to_numpy()
+        plt.scatter(x, y, c=results.H, cmap="viridis", alpha=.7)
+        lo, hi = min(np.min(x), np.min(y)), max(np.max(x), np.max(y)); plt.plot([lo, hi], [lo, hi], "k--", lw=1)
+        plt.xlabel(f"TARGET {label}"); plt.ylabel(f"C_pred {label}"); plt.title(f"Zero-fit predicted vs TARGET {label}"); plt.colorbar(label="H")
+        save_figure(fname)
+    # 4. Frobenius skill by horizon.
+    plt.figure(figsize=(7, 4));
+    for h in hs:
+        a = results.loc[results.H == h, "main_fro_skill"].dropna().to_numpy(); plt.scatter(np.full(len(a), h), a, alpha=.55)
+        if len(a): plt.plot(h, np.median(a), "ks")
+    plt.axhline(0, color="k", lw=1); plt.xlabel("Horizon H"); plt.ylabel("No-fit Frobenius skill"); plt.title("C_pred covariance skill"); save_figure("04_covariance_frobenius_skill.png")
+    # 5. Seedwise skill.
+    plt.figure(figsize=(7, 4));
+    for h in hs:
+        a = seed_summary[seed_summary.H == h]; plt.plot(a.seed, a.main_fro_skill, "o-", label=f"H={h}")
+    plt.axhline(0, color="k", lw=1); plt.xlabel("Network seed"); plt.ylabel("equal-condition mean skill"); plt.legend(); plt.title("Seedwise covariance skill"); save_figure("05_seedwise_skill.png")
+    # 6. Horizon degradation.
+    plt.figure(figsize=(7, 4));
+    q = results.groupby("H")["main_fro_skill"].agg(["mean", "median"]); plt.plot(q.index, q["mean"], "o-", label="condition mean"); plt.plot(q.index, q["median"], "s--", label="condition median")
+    plt.axhline(0, color="k", lw=1); plt.xlabel("Horizon H"); plt.ylabel("Frobenius skill"); plt.legend(); plt.title("Horizon degradation"); save_figure("06_horizon_degradation.png")
+    # 7. Top eigenspace overlap.
+    plt.figure(figsize=(7, 4));
+    for h in hs:
+        a = results.loc[results.H == h, "main_top1_overlap"].dropna(); plt.scatter(np.full(len(a), h), a, alpha=.55)
+    plt.xlabel("Horizon H"); plt.ylabel("|<u1(TARGET),u1(C_pred)>|"); plt.title("Top covariance-eigenspace alignment"); save_figure("07_top_eigenspace_overlap.png")
+    # 8. Baseline comparison.
+    plt.figure(figsize=(8, 4));
+    bb = baseline[baseline.metric == "fro_skill"]
+    labels = ["B0 no propagation", "B1 frozen geometry", "B2 isotropic"]
+    vals = [bb[bb.baseline == x].delta_mean.mean() if len(bb[bb.baseline == x]) else np.nan for x in ("B0", "B1", "B2")]
+    plt.bar(labels, vals); plt.axhline(0, color="k", lw=1); plt.ylabel("C_pred − baseline skill"); plt.title("Zero-fit baseline comparison"); plt.xticks(rotation=15, ha="right"); save_figure("08_baseline_comparison.png")
+    # 9. Deterministic unbiased grid of condition spectra: evenly spaced rows, never selected by outcome.
+    ordered = results.sort_values(["seed", "fraction", "eta", "B", "H"]).reset_index(drop=True)
+    select = np.linspace(0, len(ordered) - 1, min(12, len(ordered)), dtype=int)
+    observed = np.load(OUT / "observed_covariances.npz", allow_pickle=False)
+    pred_mats = np.load(PFN, allow_pickle=False)
+    fig, axes = plt.subplots(3, 4, figsize=(12, 8));
+    for ax, idx0 in zip(axes.ravel(), select):
+        row = ordered.iloc[int(idx0)]; k = row.matrix_key
+        for mat, style, label in [(observed[f"T_{k}"], "o-", "TARGET"), (observed[f"A_{k}"], "s--", "AUDIT"), (pred_mats[f"C_P_{k}"], "^-", "C_pred")]:
+            ev = spectral_summary(mat)["eigvals"]; ax.plot(np.arange(1, len(ev)+1), ev, style, ms=3, label=label)
+        ax.set_title(f"s{row.seed}, f{row.fraction}, eta={row.eta}, B={row.B}, H={row.H}", fontsize=7); ax.set_xticks(range(1, OBS_DIM+1)); ax.tick_params(labelsize=6)
+    handles, labels0 = axes.ravel()[0].get_legend_handles_labels(); fig.legend(handles, labels0, loc="upper right"); fig.suptitle("Unbiased evenly-spaced condition grid: covariance spectra", y=1.01); save_figure("09_target_covariance_spectra_grid.png")
+    # 10. Skill vs eta/B.
+    plt.figure(figsize=(6, 4));
+    for h in hs:
+        a = results[results.H == h]; plt.scatter(a.eta / a.B, a.main_fro_skill, alpha=.65, label=f"H={h}")
+    plt.xscale("log"); plt.axhline(0, color="k", lw=1); plt.xlabel("eta / B"); plt.ylabel("C_pred Frobenius skill"); plt.legend(); plt.title("Skill versus stochastic scale"); save_figure("10_skill_vs_eta_over_B.png")
+
+def write_reports(results, replication, seed_summary, horizon_summary, baseline, bootstrap, decision, provenance):
+    # Compact README and the mandated scaling audit, written before scientific verdict.
+    atomic_text(OUT / "README.md", f"""# Stage M1 — finite-horizon covariance under i.i.d. minibatching
+
+Run mode: `{RUN_MODE}`.  This artifact uses fresh Stage M1 data and does not read Stage 3K/3L TARGET/AUDIT scientific arrays.  The primary object is the covariance of function-space deviations from the deterministic full-gradient path, not the conditional mean.
+
+The frozen predictor is matrix-free tangent/HVP propagation through the deterministic path. TARGET and AUDIT are independent nonlinear SGD ensembles generated only after the prediction freeze hash was written.
+""")
+    atomic_text(OUT / "scaling_audit.md", """# Scaling audit
+
+`z_i` is a centered one-example gradient deviation measured along the deterministic path: `z_i = g_i - mean(g_i)`.  For an i.i.d. minibatch sampled with replacement, the synthetic tangent noise is `zeta_B = (1/B) sum_{j=1}^B z_{I_j}`.  Therefore `Cov(zeta_B) = Cov(z_i)/B`; **the factor 1/B appears exactly here and nowhere else**.
+
+The tangent update is `v_{t+1}=v_t-eta H_t v_t-eta zeta_B`.  Hence `eta^2` enters through the covariance of the propagated increments.  The reference-batch identity is explicit: replacing `B` by `2B` halves the covariance of every independently sampled `zeta_B` before propagation.  TARGET and AUDIT use the same with-replacement minibatch convention.
+""")
+    atomic_text(OUT / "code_audit_report.md", """# Static code audit
+
+- fixed conditional design: not applicable; M1 uses immutable fresh fixed states and independent trajectory ensembles;
+- fresh Stage M1 data/seeds/probes/projection/RNG labels: implemented;
+- prediction freeze precedes any TARGET/AUDIT generation: enforced by an artifact/hash gate;
+- no Stage 3K/3L scientific TARGET/AUDIT data is read: enforced by source design;
+- local noise is centered and measured along each deterministic path;
+- `1/B` enters once in `zeta_B`; `eta` enters once per tangent increment;
+- HVPs are float64 and matrix-free; no dense parameter Hessian is built;
+- nonlinear target gradients are recomputed at current stochastic parameters;
+- TARGET/AUDIT labels are independent;
+- bootstrap resamples network seeds only;
+- raw arrays, checkpoints, SHA-256 completion markers, and final ZIP are persisted to Drive.
+
+This is a static audit only. It is not a environment or scientific-result validation.
+""")
+    atomic_json(OUT / "decision.json", decision)
+    lines = [f"FINAL DIAGNOSIS: {decision['diagnosis']}", "", "## Required answers", ""]
+    for k, v in decision["answers"].items(): lines.append(f"- {k}: {v}")
+    lines += ["", "## Strongest allowed claim", decision["allowed_claim"], "", "## Forbidden claims", decision["forbidden_claims"]]
+    atomic_text(OUT / "decision_report.md", "\n".join(lines) + "\n")
