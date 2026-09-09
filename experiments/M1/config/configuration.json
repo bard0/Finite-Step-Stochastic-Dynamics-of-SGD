@@ -1,0 +1,24 @@
+{
+  "version": "M1-iid-covariance-v1",
+  "run_mode": "full",
+  "config": {
+    "seeds": [51, 52, 53, 54, 55, 56],
+    "fractions": [0.25, 0.55, 0.85],
+    "etas": [0.025, 0.05, 0.075, 0.1],
+    "batches": [16, 32, 64, 128, 256, 512],
+    "horizons": [1, 5, 10],
+    "train_steps": 240,
+    "train_batch": 32,
+    "n_target": 128,
+    "n_audit": 128,
+    "local_noise_samples": 256,
+    "tangent_draws": 64,
+    "bootstrap_draws": 5000,
+    "hutch_draws": 8
+  },
+  "master_seed": 20260904,
+  "architecture": "TinyCNN: Conv(3,8)-Tanh-AvgPool-Conv(8,12)-Tanh-AdaptiveAvgPool-Linear(12,10)",
+  "sampling": "i.i.d. minibatches with replacement",
+  "protocol_hash": "c412f773a7561d7547e7997666b570c0820c68a06697f4ea19452217ca813691",
+  "device_at_start": "cuda"
+}
