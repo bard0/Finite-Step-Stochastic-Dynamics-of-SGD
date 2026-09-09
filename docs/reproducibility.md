@@ -1,16 +1,31 @@
 # Reproducibility
 
-Every experiment should preserve:
+This repository preserves scientific provenance of finite-step SGD experiments.
 
-- source code
-- configuration
-- random seeds
-- logs
-- checkpoints where applicable
-- metrics
-- figures
-- archive checksum
+## Archived experiments
 
-Exact archived scripts should not be overwritten by refactored versions. New implementations should be added separately.
+Exact execution scripts are retained when available. Refactored implementations should not replace archived experiment sources.
 
-Large artifacts should be distributed separately from the Git repository.
+## Required experiment artifacts
+
+Each experiment should preserve:
+
+- source code;
+- configuration;
+- random seeds;
+- logs;
+- metrics;
+- figures;
+- checkpoints when applicable;
+- final archive and checksum.
+
+## Scientific controls
+
+Before accepting a claim:
+
+1. define a falsification test;
+2. compare against relevant prior work;
+3. specify baselines and controls;
+4. report limitations.
+
+Large generated artifacts are distributed separately according to `ARTIFACTS.md`.
