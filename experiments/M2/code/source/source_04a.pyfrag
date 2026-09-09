@@ -1,0 +1,59 @@
+        q=results[results.process=="RR"];plt.figure(figsize=(5,5));plt.scatter(q.target_trace,q.prediction_trace,c=q.H,cmap="viridis",alpha=.7);lo=min(q.target_trace.min(),q.prediction_trace.min());hi=max(q.target_trace.max(),q.prediction_trace.max());plt.plot([lo,hi],[lo,hi],"k--");plt.colorbar(label="H");plt.xlabel("RR TARGET trace");plt.ylabel("C_PRED_RR trace");plt.title("Predicted vs observed RR trace");finish_fig("02_predicted_vs_observed_rr_trace.png")
+    def f3():
+        q=results[results.process=="RR"];plt.figure(figsize=(7,4));[plt.scatter(np.full((q.H==h).sum(),h),q[q.H==h].fro_skill,alpha=.5) for h in HORIZONS];plt.axhline(0,color="k",lw=.8);plt.xlabel("H");plt.ylabel("RR predictor Frobenius skill");finish_fig("03_rr_frobenius_skill.png")
+    def f4():
+        q=results[results.process=="RR"];plt.figure(figsize=(7,4));plt.scatter(q.diag_fro_skill,q.fro_skill,alpha=.5);lo=min(q.diag_fro_skill.min(),q.fro_skill.min());hi=max(q.diag_fro_skill.max(),q.fro_skill.max());plt.plot([lo,hi],[lo,hi],"k--");plt.xlabel("matched diagonal skill");plt.ylabel("full RR predictor skill");plt.title("Full temporal RR vs diagonal predictor");finish_fig("04_rr_full_vs_diagonal.png")
+    def f5():
+        plt.figure(figsize=(5,5));plt.scatter(delta_rows.delta_norm_target,delta_rows.delta_norm_prediction,alpha=.6);lo=min(delta_rows.delta_norm_target.min(),delta_rows.delta_norm_prediction.min());hi=max(delta_rows.delta_norm_target.max(),delta_rows.delta_norm_prediction.max());plt.plot([lo,hi],[lo,hi],"k--");plt.xlabel("observed ||DeltaC||");plt.ylabel("predicted ||DeltaC||");finish_fig("05_delta_norm_predicted_vs_observed.png")
+    def f6():
+        plt.figure(figsize=(7,4));[plt.scatter(np.full((delta_rows.H==h).sum(),h),delta_rows[delta_rows.H==h].delta_matrix_cosine,alpha=.5) for h in HORIZONS];plt.axhline(.7,color="tab:red",ls="--");plt.xlabel("H");plt.ylabel("DeltaC matrix cosine");finish_fig("06_delta_matrix_cosine_by_horizon.png")
+    def f7():
+        q=epoch_rows[epoch_rows.epoch_end];plt.figure(figsize=(5,5));plt.scatter(q.rr_ind_trace_ratio_target,q.rr_ind_trace_ratio_prediction,alpha=.6);lo=min(q.rr_ind_trace_ratio_target.min(),q.rr_ind_trace_ratio_prediction.min());hi=max(q.rr_ind_trace_ratio_target.max(),q.rr_ind_trace_ratio_prediction.max());plt.plot([lo,hi],[lo,hi],"k--");plt.xlabel("observed RR/IND trace ratio");plt.ylabel("predicted ratio");finish_fig("07_epoch_end_ratio.png")
+    def f8():
+        q=seed_summary;plt.figure(figsize=(7,4));plt.plot(q.seed,q.relative_temporal_effect,"o-");plt.axhline(.05,color="tab:red",ls="--");plt.xlabel("network seed");plt.ylabel("equal-condition relative temporal effect");finish_fig("08_seedwise_temporal_effect.png")
+    def f9():
+        q=seed_summary;plt.figure(figsize=(7,4));plt.plot(q.seed,q.delta_skill,"o-");plt.axhline(0,color="k");plt.xlabel("network seed");plt.ylabel("DeltaC prediction skill");finish_fig("09_seedwise_delta_skill.png")
+    def f10():
+        # Fixed non-outcome selection: first seed/fraction and median eta/B condition.
+        q=delta_rows.sort_values(["seed","fraction","eta","B","H"]);base=q[(q.seed==min(C["seeds"]))&(q.fraction==min(C["fractions"]))];row=base.iloc[len(base)//2];obs=np.load(OUT/"observed_covariances.npz",allow_pickle=False);pred=np.load(OUT/"predictions_frozen.npz",allow_pickle=False);key=row.matrix_key
+        plt.figure(figsize=(8,3));
+        for ax,data,title in zip([plt.subplot(1,3,1),plt.subplot(1,3,2),plt.subplot(1,3,3)],[obs[f"RR_T_{key}"],obs[f"IND_T_{key}"],pred[f"DELTA_{key}"]],["RR TARGET covariance","IND TARGET covariance","predicted DeltaC"]): im=ax.imshow(data,cmap="coolwarm");ax.set_title(title,fontsize=8);plt.colorbar(im,ax=ax,fraction=.046)
+        finish_fig("10_preregistered_covariance_matrices.png")
+    def f11():
+        q=epoch_rows.groupby(["H","within_epoch_position"],as_index=False).relative_temporal_effect.mean();plt.figure(figsize=(7,4));plt.scatter(q.H,q.relative_temporal_effect,c=q.within_epoch_position,cmap="plasma");plt.colorbar(label="within-epoch position");plt.xlabel("H");plt.ylabel("||DeltaC|| / ||C_IND||");finish_fig("11_horizon_epoch_position_summary.png")
+    for name,fn in [("trace",f1),("rr-trace",f2),("rr-skill",f3),("full-vs-diag",f4),("delta-norm",f5),("delta-cos",f6),("epoch-ratio",f7),("seed-effect",f8),("seed-skill",f9),("matrices",f10),("epoch-position",f11)]: figure_guard(name,fn,failures)
+    atomic_json(OUT/"figure_generation_report.json",{"failures":failures,"known_stage_m1_plotting_error":"KeyError(target_trace) was archived in M1; M2 tables/decision were written before figures."});mirror_file(OUT/"figure_generation_report.json")
+
+# ============================================================================
+# 7. Main pipeline.  All pre-freeze work is deterministic-path/local-bank work;
+#    raw RR/IND trajectories are generated only after the freeze hash exists.
+# ============================================================================
+def main():
+    global OUT,OUTD,FIG,X,Y,PROBE,FP
+    DRIVE_ROOT.mkdir(parents=True,exist_ok=True); RUN_ROOT.mkdir(parents=True,exist_ok=True)
+    protocol={"version":PROTOCOL_VERSION,"run_mode":RUN_MODE,"config":C,"master_seed":MASTER_SEED,"m1_source":str(M1_SOURCE),"sampling":{"IND_SUBSET":"fresh independent WOR subset each step","RR":"fresh permutation each epoch; consecutive non-overlapping batches"}}
+    phash=hashlib.sha256(json.dumps(protocol,sort_keys=True,default=jdefault).encode()).hexdigest();active=DRIVE_ROOT/f"stage_m2_active_{RUN_MODE}.json"
+    if RESUME and active.exists():
+        a=json.loads(active.read_text())
+        if a.get("protocol_hash")!=phash: die("M2 active run config mismatch; refusing mixed resume")
+        rid=a["run_id"]
+    else:
+        rid="stage_m2_random_reshuffling_temporal_covariance_"+datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ");atomic_json(active,{"run_id":rid,"protocol_hash":phash,"created_utc":utc()})
+    OUT=RUN_ROOT/rid;OUTD=DRIVE_ROOT/rid
+    if RESUME and OUTD.exists() and not OUT.exists(): shutil.copytree(OUTD,OUT,dirs_exist_ok=True)
+    OUT.mkdir(parents=True,exist_ok=True)
+    for n in ("raw","predictor_checkpoints","scientific_checkpoints","deterministic","per_example_banks","figures"): (OUT/n).mkdir(exist_ok=True)
+    RAW=OUT/"raw";PRED=OUT/"predictor_checkpoints";SCI=OUT/"scientific_checkpoints";DET=OUT/"deterministic";BANK=OUT/"per_example_banks";FIG=OUT/"figures"
+    log(f"RUN_MODE={RUN_MODE}; DEVICE={DEVICE}; RUN_ID={rid}")
+    atomic_json(OUT/"configuration.json",protocol|{"protocol_hash":phash,"started_utc":utc(),"device":str(DEVICE)})
+    atomic_json(OUT/"preregistration.json",{"primary_causal_comparison":"RR versus IND_SUBSET with the same one-step WOR marginal","predictor_freeze_before_outcomes":True,"bootstrap_unit":"network seed","new_M2_scientific_outcomes_only":True,"batch_grid_divides_N":True,"verdicts":["M2-1","M2-2","M2-3","M2-4","M2-5","M2-6"]})
+    atomic_text(OUT/"exact_executed_code.py",capture_source_code())
+    source,x_cpu,y_cpu,probe_cpu,fp_np,all_states=source_manifest();atomic_json(OUT/"m1_source_manifest.json",source)
+    atomic_text(OUT/"provenance_report.md","# M2 provenance\n\nM2 reuses only M1 immutable platform files (dataset, probe, projection, fixed states, source metadata). It does not read M1 stochastic TARGET/AUDIT outcomes for fitting, calibration, or parameter choice. New M2 RR/IND TARGET/AUDIT pools are fresh.\n\nKnown M1 archived plotting failure is recorded in `m1_source_manifest.json`; it does not alter M2 data.\n")
+    for p in (OUT/"configuration.json",OUT/"preregistration.json",OUT/"exact_executed_code.py",OUT/"m1_source_manifest.json",OUT/"provenance_report.md"): mirror_file(p)
+    # Select exact immutable M1 states; never train or regenerate network/data.
+    wanted={(int(s),round(float(f),12)) for s in C["seeds"] for f in C["fractions"]};states=[q for q in all_states if (int(q["seed"]),round(float(q["fraction"]),12)) in wanted]
+    if len(states)!=len(wanted): die("M2 SOURCE PLATFORM INVALID: requested M1 fixed states missing")
+    X=x_cpu.to(DEVICE,DTYPE);Y=y_cpu.to(DEVICE);PROBE=probe_cpu.to(DEVICE,DTYPE);FP=torch.as_tensor(fp_np,device=DEVICE,dtype=DTYPE)
+    pnum=sum(p.numel() for p in TinyCNN().parameters())
+    if FP.shape!=(len(PROBE)*10,OBS_DIM) or any(torch.as_tensor(s["theta"]).numel()!=pnum for s in states): die("M2 SOURCE PLATFORM INVALID: immutable platform shape mismatch")

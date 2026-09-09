@@ -1,0 +1,60 @@
+    # Tables exist before figures by design, guarding against the archived M1 plotting failure.
+    for name,df in (("covariance_replication_rr.csv",rrdf),("covariance_replication_ind.csv",inddf),("temporal_difference_replication.csv",drepdf),("condition_results.csv",results),("delta_covariance_results.csv",deltas),("epoch_structure_summary.csv",epochdf)):
+        df.to_csv(OUT/name,index=False);mirror_file(OUT/name)
+    atomic_npz(OUT/"observed_covariances.npz",**observed);mirror_file(OUT/"observed_covariances.npz")
+
+    # Equal-condition seed summaries: no condition-level bootstrap.
+    seedrows=[]
+    for h in HORIZONS:
+        for s in C["seeds"]:
+            rr=results[(results.process=="RR")&(results.H==h)&(results.seed==s)];dd=deltas[(deltas.H==h)&(deltas.seed==s)&deltas.difference_resolved]
+            if len(rr):
+                seedrows.append({"seed":s,"H":h,"rr_fro_skill":rr.fro_skill.mean(),"rr_matrix_cosine":rr.matrix_cosine.mean(),"rr_minus_diag_skill":(rr.fro_skill-rr.diag_fro_skill).mean(),"rr_frozen_skill":rr.frozen_rr_fro_skill.mean(),"rr_rep_cosine":rrdf[(rrdf.seed==s)&(rrdf.H==h)].rep_matrix_cosine.mean(),"ind_rep_cosine":inddf[(inddf.seed==s)&(inddf.H==h)].rep_matrix_cosine.mean(),"relative_temporal_effect":dd.relative_temporal_effect.mean() if len(dd) else np.nan,"delta_skill":dd.delta_skill.mean() if len(dd) else np.nan,"delta_matrix_cosine":dd.delta_matrix_cosine.mean() if len(dd) else np.nan,"epoch_ratio_error":(dd.observed_epoch_trace_ratio-dd.predicted_epoch_trace_ratio).abs().mean() if len(dd) else np.nan,"resolved_fraction":float(len(dd))/max(len(deltas[(deltas.H==h)&(deltas.seed==s)]),1)})
+    seed_summary=pd.DataFrame(seedrows);seed_summary.to_csv(OUT/"seed_summary.csv",index=False);mirror_file(OUT/"seed_summary.csv")
+    brows=[]
+    for h in HORIZONS:
+        ss=seed_summary[seed_summary.H==h]
+        for name,col in (("RR absolute Frobenius skill","rr_fro_skill"),("RR minus matched diagonal skill","rr_minus_diag_skill"),("DeltaC prediction skill","delta_skill"),("DeltaC matrix cosine","delta_matrix_cosine"),("relative temporal effect","relative_temporal_effect"),("epoch-end trace-ratio error","epoch_ratio_error")):
+            stat=bootstrap(ss[col].to_numpy(),C["bootstrap_draws"],f"{h}/{name}");brows.append({"H":h,"quantity":name,**stat})
+    boot=pd.DataFrame(brows);boot.to_csv(OUT/"bootstrap_summary.csv",index=False);mirror_file(OUT/"bootstrap_summary.csv")
+    base=pd.DataFrame([{"H":h,"baseline":"B0 matched diagonal","metric":"RR full minus diagonal Frobenius skill","mean":bootstrap(seed_summary[seed_summary.H==h].rr_minus_diag_skill.to_numpy(),C["bootstrap_draws"],f"baseline/{h}")["mean"],"ci_low":bootstrap(seed_summary[seed_summary.H==h].rr_minus_diag_skill.to_numpy(),C["bootstrap_draws"],f"baseline/{h}")["ci_low"],"ci_high":bootstrap(seed_summary[seed_summary.H==h].rr_minus_diag_skill.to_numpy(),C["bootstrap_draws"],f"baseline/{h}")["ci_high"]} for h in HORIZONS])
+    # B1 is deliberately contextual only: its one-step marginal differs, so it is not used in primary tests.
+    base=pd.concat([base,pd.DataFrame([{"H":np.nan,"baseline":"B1 M1 iid-with-replacement","metric":"secondary context only; not a matched temporal baseline","mean":np.nan,"ci_low":np.nan,"ci_high":np.nan},{"H":np.nan,"baseline":"B2 frozen-time RR","metric":"reported in condition_results.csv","mean":np.nan,"ci_low":np.nan,"ci_high":np.nan},{"H":np.nan,"baseline":"B3 finite-population trace-only","metric":"predictions_frozen.csv scalar proxy only","mean":np.nan,"ci_low":np.nan,"ci_high":np.nan}])],ignore_index=True)
+    base.to_csv(OUT/"baseline_comparison.csv",index=False);mirror_file(OUT/"baseline_comparison.csv")
+
+    # Pre-registered verdict uses H=10 in full mode and remains non-scientific in smoke.
+    if RUN_MODE=="smoke": diagnosis="SMOKE ONLY — NO SCIENTIFIC CLAIM";advance="NO"
+    else:
+        h=10;rrh=results[(results.process=="RR")&(results.H==h)];indh=results[(results.process=="IND_SUBSET")&(results.H==h)];dh=deltas[deltas.H==h];dr=dh[dh.difference_resolved]
+        ss=seed_summary[seed_summary.H==h];bb=boot[boot.H==h].set_index("quantity")
+        rr_base=bool(len(rrh) and rrdf[rrdf.H==h].rep_matrix_cosine.median()>=.8 and rrdf[rrdf.H==h].rep_fro_error.median()<=.5 and .5<=rrdf[rrdf.H==h].rep_trace_ratio_audit_over_target.median()<=2)
+        ind_base=bool(len(indh) and inddf[inddf.H==h].rep_matrix_cosine.median()>=.8 and inddf[inddf.H==h].rep_fro_error.median()<=.5 and .5<=inddf[inddf.H==h].rep_trace_ratio_audit_over_target.median()<=2)
+        resolved_fraction=float(dr.shape[0]/max(dh.shape[0],1));delta_resolved=bool(rr_base and ind_base and resolved_fraction>=.5)
+        effect=float(dr.relative_temporal_effect.median()) if len(dr) else np.nan
+        rr_skill=float(rrh.fro_skill.mean()) if len(rrh) else np.nan;rr_cos=float(rrh.matrix_cosine.mean()) if len(rrh) else np.nan
+        delta_skill=float(dr.delta_skill.mean()) if len(dr) else np.nan;delta_cos=float(dr.delta_matrix_cosine.mean()) if len(dr) else np.nan
+        skill_ci=float(bb.loc["RR absolute Frobenius skill","ci_low"]);improve_ci=float(bb.loc["RR minus matched diagonal skill","ci_low"])
+        strong=bool(delta_resolved and rr_skill>=.60 and rr_cos>=.85 and skill_ci>.30 and improve_ci>0 and delta_skill>0 and delta_cos>=.70 and effect>=.05)
+        weak_effect=bool(rr_base and ind_base and (not len(dr) or (np.isfinite(effect) and effect<.05)))
+        if strong: diagnosis,advance="M2-1","FIRST TEST ANOTHER ARCHITECTURE/DATASET"
+        elif delta_resolved and np.isfinite(effect) and effect>=.05 and improve_ci<=0: diagnosis,advance="M2-2","FIRST TEST ANOTHER ARCHITECTURE/DATASET"
+        elif weak_effect: diagnosis,advance="M2-3","NO — FIRST TEST ANOTHER ARCHITECTURE/DATASET"
+        elif delta_resolved and np.isfinite(effect) and effect>=.05: diagnosis,advance="M2-4","NO — FIRST TEST ANOTHER ARCHITECTURE/DATASET"
+        else: diagnosis,advance="M2-5","NO"
+    answers={
+      "M1 source integrity passed?":"YES","prediction freeze before new stochastic outcomes?":"YES","matched one-step marginal audit passed?":str(marginal_pass),"analytic RR K_st formula audit passed?":str(formula_pass),
+      "RR TARGET/AUDIT covariance replication at H=1,2,4,8,10,16?":"See covariance_replication_rr.csv","IND TARGET/AUDIT covariance replication?":"See covariance_replication_ind.csv","DeltaC TARGET/AUDIT replication?":"See temporal_difference_replication.csv",
+      "fraction of conditions with resolved temporal difference?":"See delta_covariance_results.csv","median relative temporal-effect magnitude?":"See delta_covariance_results.csv and seed_summary.csv","RR full predictor H=10 skill + CI?":"N/A in smoke" if RUN_MODE=="smoke" else str(boot[(boot.H==10)&(boot.quantity=="RR absolute Frobenius skill")][["mean","ci_low","ci_high"]].to_dict("records")),
+      "RR full predictor matrix cosine?":"See condition_results.csv","diagonal baseline skill?":"See condition_results.csv","RR-minus-diagonal bootstrap delta?":"See bootstrap_summary.csv","DeltaC prediction skill + CI?":"See bootstrap_summary.csv","DeltaC matrix cosine?":"See delta_covariance_results.csv","epoch-end trace ratio observed vs predicted?":"See epoch_structure_summary.csv","equal-seed mean/median?":"See seed_summary.csv","any seed concentration problem?":"See per_example_noise_diagnostics.csv and seed_summary.csv","frozen-time RR baseline?":"See condition_results.csv","does temporal correlation add predictive information beyond one-step marginals?":diagnosis,"strongest allowed claim?":"Verdict-controlled; see below","forbidden claims?":"No universal memory, novelty, generalization, optimizer-memory, or RR-superiority claims.","should next stage move to momentum/optimizer memory or first test another architecture/dataset?":advance}
+    if RUN_MODE=="smoke": allowed="No scientific claim: smoke only."
+    elif diagnosis=="M2-1": allowed="In the tested small-CNN regime, RR induces a reproducible finite-horizon covariance change beyond matched one-step WOR marginals, and explicit temporal per-example gradient-noise correlations predict that change zero-fit under deterministic tangent propagation."
+    elif diagnosis=="M2-2": allowed="The tested sampling rule changes covariance reproducibly, but the current explicit temporal predictor adds no reproducible value beyond the matched diagonal model."
+    elif diagnosis=="M2-3": allowed="The RR-minus-IND covariance effect is too small or unresolved in this tested regime; this is not evidence against RR memory universally."
+    elif diagnosis=="M2-4": allowed="A reproducible RR temporal covariance effect is not explained by this deterministic tangent K_st model."
+    else: allowed="No temporal-difference scientific claim is justified because the target difference is unresolved."
+    forbidden="Do not claim discovery of SGD memory, first RR theory, universal non-Markovianity, RR generalization benefit, optimizer memory, or a universal law."
+    decision={"diagnosis":diagnosis,"run_mode":RUN_MODE,"answers":answers,"allowed_claim":allowed,"forbidden_claims":forbidden,"completed_utc":utc()}
+    # Decision is persisted before plotting by explicit requirement.
+    atomic_json(OUT/"decision.json",decision)
+    lines=[f"FINAL DIAGNOSIS: {diagnosis}","", "# Stage M2 decision report",""]+[f"- {k}: {v}" for k,v in answers.items()]+["","## Strongest allowed claim",allowed,"","## Forbidden claims",forbidden]
+    atomic_text(OUT/"decision_report.md","\n".join(lines)+"\n")

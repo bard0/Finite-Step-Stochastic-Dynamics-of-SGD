@@ -1,0 +1,60 @@
+    pred_rows=[];pred_arrays={};noise_rows=[];formula_rows=[];marginal_rows=[]
+    for q in states:
+        s,f=int(q["seed"]),float(q["fraction"]);theta0=torch.as_tensor(q["theta"]).cpu().double().numpy()
+        for eta in C["etas"]:
+            tag=path_tag(s,f,eta);dp=DET/f"{tag}.npz";bp=BANK/f"{tag}.npz"
+            if valid_complete(dp):
+                z=np.load(dp,allow_pickle=False);theta_path,gdphi,jacs=z["theta_path"],z["phi_gd"],z["jacobians"]
+            else:
+                theta_path,gdphi,jacs,fullgs,losses=gd_path(theta0,eta,X,Y,PROBE,FP)
+                save_complete_npz(dp,theta_path=theta_path,phi_gd=gdphi,jacobians=jacs,full_gradients=fullgs,losses=losses,seed=np.array(s),fraction=np.array(f),eta=np.array(eta));mirror_complete(dp)
+            if valid_complete(bp):
+                z=np.load(bp,allow_pickle=False);banks=z["banks"];center=z["centered_mean_norms"];methods=json.loads(str(z["methods_json"].item()))
+            else:
+                banks,means,center,methods=per_example_bank(theta_path,X,Y,s,f,eta)
+                save_complete_npz(bp,banks=banks,per_example_means=means,centered_mean_norms=center,methods_json=np.array(json.dumps(methods)),seed=np.array(s),fraction=np.array(f),eta=np.array(eta));mirror_complete(bp)
+            for t in range(HMAX+1): noise_rows.append({"seed":s,"fraction":f,"eta":eta,"t":t,"N":N_DATA,"centered_mean_norm":float(center[t]),"bank_method":methods[t],"single_example_noise_energy":float(np.mean(np.sum(banks[t]**2,axis=1)) )})
+            for b in C["batches"]:
+                cp=PRED/f"{cond_tag(s,f,eta,b)}_predictor.npz"
+                if valid_complete(cp):
+                    z=np.load(cp,allow_pickle=False);pred_rows.extend(json.loads(str(z["rows_json"].item())));formula_rows.extend(json.loads(str(z["formula_json"].item())));marginal_rows.extend(json.loads(str(z["marginal_json"].item())))
+                    for k in z.files:
+                        if k.startswith("C_") or k.startswith("DELTA_"): pred_arrays[k]=z[k]
+                    continue
+                form=temporal_formula_audit(banks,b,s,f,eta);marg=matched_marginal_audit(banks,b,s,f,eta);pc=tangent_predict(theta_path,jacs,banks,eta,b,s,f)
+                rows=[];epoch=N_DATA//b
+                for h in HORIZONS:
+                    key=f"s{s}_f{ft(f)}_e{ft(eta)}_B{b}_H{h}";cd,cr,cf=pc["DIAG"][h],pc["RR"][h],pc["FROZEN_RR"][h];delta=sym(cr-cd);sd,sr=esum(cd),esum(cr)
+                    pred_arrays[f"C_DIAG_{key}"]=cd;pred_arrays[f"C_RR_{key}"]=cr;pred_arrays[f"C_FROZEN_RR_{key}"]=cf;pred_arrays[f"DELTA_{key}"]=delta
+                    rows.append({"seed":s,"fraction":f,"eta":eta,"B":b,"H":h,"matrix_key":key,"epoch_index":(h-1)//epoch+1,"within_epoch_position":(h-1)%epoch+1,"epoch_end":bool(h%epoch==0),"H_epoch":epoch,
+                      "diag_trace":sd["trace"],"rr_trace":sr["trace"],"diag_fro":sd["fro"],"rr_fro":sr["fro"],"diag_top_eig":sd["top"],"rr_top_eig":sr["top"],"diag_erank":sd["erank"],"rr_erank":sr["erank"],"rr_diag_matrix_cosine":float(np.sum(cd*cr)/max(sd["fro"]*sr["fro"],EPS)),"delta_pred_norm":float(np.linalg.norm(delta,"fro")),"relative_temporal_effect_pred":float(np.linalg.norm(delta,"fro")/max(sd["fro"],EPS)),"predicted_epoch_trace_ratio":float(sr["trace"]/max(sd["trace"],EPS)),"finite_population_trace_proxy":float(h*eta*eta*np.mean([np.mean(np.sum(banks[t]**2,axis=1))*(N_DATA-b)/(b*(N_DATA-1)) for t in range(h)]))})
+                save_complete_npz(cp,rows_json=np.array(json.dumps(rows,default=jdefault)),formula_json=np.array(form.to_json(orient="records")),marginal_json=np.array(marg.to_json(orient="records")),**{k:v for k,v in pred_arrays.items() if f"s{s}_f{ft(f)}_e{ft(eta)}_B{b}_" in k});mirror_complete(cp)
+                pred_rows.extend(rows);formula_rows.extend(form.to_dict("records"));marginal_rows.extend(marg.to_dict("records"));log(f"prediction checkpoint verified {cond_tag(s,f,eta,b)}")
+                gc.collect()
+                if torch.cuda.is_available(): torch.cuda.empty_cache()
+
+    noise=pd.DataFrame(noise_rows);formula=pd.DataFrame(formula_rows);marginal=pd.DataFrame(marginal_rows)
+    noise.to_csv(OUT/"per_example_noise_diagnostics.csv",index=False);formula.to_csv(OUT/"temporal_covariance_formula_audit.csv",index=False);marginal.to_csv(OUT/"matched_marginal_audit.csv",index=False)
+    # Formula pass checks only nonzero analytic contractions; zero cross-epoch terms are reported but not divided by zero.
+    nonzero=formula[(formula.analytic_fro>1e-10)&np.isfinite(formula.relative_error)];formula_pass=bool(len(nonzero)>0 and nonzero.relative_error.median()<= (.8 if RUN_MODE=="smoke" else .35))
+    marginal_pass=bool(np.isfinite(marginal.select_dtypes(include=[np.number]).to_numpy()).all() and marginal.cov_relative_difference.median()<= (.8 if RUN_MODE=="smoke" else .30) and (.5 if RUN_MODE=="smoke" else .75)<=marginal.trace_ratio.median()<= (2.0 if RUN_MODE=="smoke" else 1.25))
+    atomic_text(OUT/"temporal_covariance_formula_audit.md",f"# Explicit finite-population K_st audit\n\nSame-time: K_tt=(N-B)/(B(N-1)) Gamma_tt.  Same-epoch distinct positions: K_st=-Gamma_st/(N-1). Across epoch boundaries: K_st=0.  Projection-only permutation Monte Carlo was used for the saved contractions; it is not represented as a full parameter covariance.\n\nNonzero-contraction median relative error: {nonzero.relative_error.median() if len(nonzero) else np.nan}; pass={formula_pass}.\n")
+    atomic_text(OUT/"matched_marginal_audit.md",f"# Matched one-step marginal audit\n\nIND_SUBSET and RR both sample a uniform B-subset without replacement at each fixed time. Independent projection-only simulations compare their marginal mean/covariance. Median covariance relative difference={marginal.cov_relative_difference.median()}; median trace ratio={marginal.trace_ratio.median()}; pass={marginal_pass}.\n")
+    for p in (OUT/"per_example_noise_diagnostics.csv",OUT/"temporal_covariance_formula_audit.csv",OUT/"matched_marginal_audit.csv",OUT/"temporal_covariance_formula_audit.md",OUT/"matched_marginal_audit.md"): mirror_file(p)
+    if not formula_pass: die("M2-6: analytic RR K_st formula audit failed")
+    if not marginal_pass: die("M2-6: IND_SUBSET/RR matched one-step marginal audit failed")
+
+    pred=pd.DataFrame(pred_rows).drop_duplicates(["seed","fraction","eta","B","H"],keep="last").sort_values(["seed","fraction","eta","B","H"])
+    expected=len(states)*len(C["etas"])*len(C["batches"])*len(HORIZONS)
+    if len(pred)!=expected: die("Incomplete frozen-prediction design")
+    PFC=OUT/"predictions_frozen.csv";PFN=OUT/"predictions_frozen.npz";PFJ=OUT/"prediction_freeze.json";PFH=OUT/"predictions_frozen_sha256.txt"
+    existing=list(RAW.glob("*.npz"))
+    if not PFC.exists():
+        if existing: die("M2-6: raw outcomes exist before prediction freeze")
+        pred.to_csv(PFC,index=False);atomic_npz(PFN,**pred_arrays);h=sha256(PFC);atomic_json(PFJ,{"frozen_utc":utc(),"predictions_csv_sha256":h,"raw_files_before_freeze":0,"m1_source_manifest_sha256":sha256(OUT/"m1_source_manifest.json"),"formula_audit_pass":formula_pass,"matched_marginal_pass":marginal_pass});atomic_text(PFH,h+"  predictions_frozen.csv\n")
+        for p in (PFC,PFN,PFJ,PFH): mirror_file(p)
+        log("Hard M2 prediction freeze completed before new RR/IND trajectories")
+    else:
+        if not (PFN.exists() and PFJ.exists() and PFH.exists()): die("Incomplete M2 prediction freeze artifacts")
+        h=sha256(PFC);meta=json.loads(PFJ.read_text())
+        if meta.get("predictions_csv_sha256")!=h or h not in PFH.read_text(): die("M2 prediction freeze hash mismatch")

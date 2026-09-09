@@ -1,0 +1,120 @@
+def flat(m): return torch.cat([p.detach().reshape(-1) for p in m.parameters()])
+def set_flat(m,v):
+    v=torch.as_tensor(v,device=DEVICE,dtype=next(m.parameters()).dtype);k=0
+    with torch.no_grad():
+        for p in m.parameters():
+            n=p.numel();p.copy_(v[k:k+n].reshape_as(p));k+=n
+    if k!=v.numel(): die("parameter-vector mismatch")
+def full_loss(m,x,y): return F.cross_entropy(m(x),y)
+def gvec(m,x,y): return torch.cat([g.reshape(-1) for g in torch.autograd.grad(full_loss(m,x,y),tuple(m.parameters()))])
+def hvp(m,x,y,v):
+    ps=tuple(m.parameters());g=torch.autograd.grad(full_loss(m,x,y),ps,create_graph=True,retain_graph=True)
+    d=torch.dot(torch.cat([q.reshape(-1) for q in g]),v)
+    h=torch.autograd.grad(d,ps,allow_unused=True,retain_graph=False)
+    return torch.cat([(torch.zeros_like(p) if q is None else q).reshape(-1) for p,q in zip(ps,h)])
+def phi(m,px,fp): return (m(px).reshape(-1)@fp).detach().cpu().double().numpy()
+def jac_phi(m,px,fp):
+    logits=m(px).reshape(-1);ps=tuple(m.parameters());out=[]
+    for j in range(fp.shape[1]):
+        q=torch.autograd.grad(torch.dot(logits,fp[:,j]),ps,retain_graph=(j+1<fp.shape[1]))
+        out.append(torch.cat([z.reshape(-1) for z in q]).detach().cpu().double().numpy())
+    return np.stack(out)
+
+# ============================================================================
+# 3. Small function-space covariance metrics; DeltaC stays indefinite.
+# ============================================================================
+def sym(c): return .5*(np.asarray(c,dtype=np.float64)+np.asarray(c,dtype=np.float64).T)
+def cov(x):
+    x=np.asarray(x,dtype=np.float64)
+    if x.ndim!=2 or len(x)<2: die("covariance needs >=2 samples")
+    z=x-x.mean(0,keepdims=True);return sym(z.T@z/(len(x)-1))
+def esum(c,indef=False):
+    c=sym(c);raw,v=np.linalg.eigh(c);scale=max(1.,float(np.max(np.abs(raw))))
+    if not indef and raw.min()<-1e-9*scale: die(f"material negative covariance eigenvalue {raw.min():.3e}")
+    w=raw if indef else np.maximum(raw,0.);order=np.argsort(np.abs(w) if indef else w)[::-1];w,v=w[order],v[:,order]
+    tr=float(np.trace(c));fr=float(np.linalg.norm(c,"fro"))
+    if indef: er=np.nan
+    else:
+        p=w[w>EPS]/w.sum() if w.sum()>EPS else np.array([]);er=float(np.exp(-(p*np.log(p)).sum())) if len(p) else 0.
+    return dict(raw=raw,w=w,v=v,trace=tr,fro=fr,top=float(w[0]),erank=er)
+def cov_metrics(t,p):
+    a,b=esum(t),esum(p);fe=float(np.linalg.norm(sym(t)-sym(p),"fro")/max(a["fro"],EPS));k=min(TOP_K,t.shape[0]);ang=subspace_angles(a["v"][:,:k],b["v"][:,:k])
+    return dict(fro_error=fe,fro_skill=float(1-fe*fe),matrix_cosine=float(np.sum(sym(t)*sym(p))/max(a["fro"]*b["fro"],EPS)),
+      trace_rel_error=float(abs(b["trace"]-a["trace"])/max(abs(a["trace"]),EPS)),top_eig_rel_error=float(abs(b["top"]-a["top"])/max(abs(a["top"]),EPS)),
+      top1_overlap=float(abs(a["v"][:,0]@b["v"][:,0])),topk_grassmann=float(np.linalg.norm(ang)),target_topk_explained=float(np.trace(b["v"][:,:k].T@t@b["v"][:,:k])/max(a["trace"],EPS)),
+      target_trace=a["trace"],prediction_trace=b["trace"],target_top_eig=a["top"],prediction_top_eig=b["top"],target_erank=a["erank"],prediction_erank=b["erank"])
+def delta_metrics(t,p):
+    a,b=esum(t,True),esum(p,True);fe=float(np.linalg.norm(sym(t)-sym(p),"fro")/max(a["fro"],EPS))
+    return dict(delta_fro_error=fe,delta_skill=float(1-fe*fe),delta_matrix_cosine=float(np.sum(sym(t)*sym(p))/max(a["fro"]*b["fro"],EPS)),
+      delta_trace_target=a["trace"],delta_trace_prediction=b["trace"],delta_signed_top_target=a["top"],delta_signed_top_prediction=b["top"],delta_norm_target=a["fro"],delta_norm_prediction=b["fro"])
+
+# ============================================================================
+# 4. Immutable M1 load, deterministic paths, and complete N=256 noise banks.
+# ============================================================================
+def capture_source_code():
+    try:
+        from IPython import get_ipython
+        text=get_ipython().history_manager.input_hist_raw[-1]
+        if text and text.strip(): return text
+    except Exception: pass
+    die("Cannot capture exact Colab cell source; aborting rather than packaging notebook history ambiguously.")
+
+def source_manifest():
+    required=["configuration.json","provenance_report.md","prediction_freeze.json","predictions_frozen_sha256.txt","exact_executed_code.py","train_x.pt","train_y.pt","probe_x.pt","projection.npy","fixed_states.pt","decision.json"]
+    missing=[x for x in required if not (M1_SOURCE/x).exists()]
+    if missing: die("M2 SOURCE PLATFORM INVALID: missing M1 immutable artifacts: "+str(missing))
+    cfg=json.loads((M1_SOURCE/"configuration.json").read_text());dec=json.loads((M1_SOURCE/"decision.json").read_text());freeze=json.loads((M1_SOURCE/"prediction_freeze.json").read_text())
+    if str(cfg.get("run_mode","")).lower()!="full": die("M2 SOURCE PLATFORM INVALID: M1 was not a full run")
+    if str(dec.get("diagnosis",""))!="M1": die("M2 SOURCE PLATFORM INVALID: M1 final diagnosis is not M1")
+    csv=M1_SOURCE/"predictions_frozen.csv";expected=(M1_SOURCE/"predictions_frozen_sha256.txt").read_text()
+    if not csv.exists() or sha256(csv) not in expected or freeze.get("predictions_csv_sha256")!=sha256(csv): die("M2 SOURCE PLATFORM INVALID: M1 prediction freeze hash mismatch")
+    x=torch.load(M1_SOURCE/"train_x.pt",map_location="cpu");y=torch.load(M1_SOURCE/"train_y.pt",map_location="cpu");px=torch.load(M1_SOURCE/"probe_x.pt",map_location="cpu");fp=np.load(M1_SOURCE/"projection.npy")
+    states=torch.load(M1_SOURCE/"fixed_states.pt",map_location="cpu")
+    if len(x)!=N_DATA or len(y)!=N_DATA: die("M2 SOURCE PLATFORM INVALID: M1 dataset length is not 256")
+    if fp.shape!=(len(px)*10,OBS_DIM): die("M2 SOURCE PLATFORM INVALID: incompatible probe/projection")
+    pnum=sum(p.numel() for p in TinyCNN().parameters())
+    if not all("theta" in q and int(torch.as_tensor(q["theta"]).numel())==pnum for q in states): die("M2 SOURCE PLATFORM INVALID: fixed-state architecture mismatch")
+    old_failure=(M1_SOURCE/"runtime_failure.json")
+    return dict(source=str(M1_SOURCE),source_configuration=cfg,source_decision=dec,source_freeze=freeze,
+      m1_archived_post_scientific_plot_failure_present=old_failure.exists(),
+      m1_archived_plot_failure_text=(old_failure.read_text()[:2000] if old_failure.exists() else None),
+      files=[{"path":n,"sha256":sha256(M1_SOURCE/n),"bytes":(M1_SOURCE/n).stat().st_size} for n in required+["predictions_frozen.csv"]]),x,y,px,fp,states
+
+def gd_path(theta0,eta,x,y,px,fp):
+    m=new_model();set_flat(m,theta0);th=[];ph=[];js=[];gs=[];ls=[]
+    for t in range(HMAX+1):
+        th.append(flat(m).cpu().double().numpy());ph.append(phi(m,px,fp));js.append(jac_phi(m,px,fp));ls.append(float(full_loss(m,x,y).detach().cpu()))
+        if t<HMAX:
+            g=gvec(m,x,y);gs.append(g.detach().cpu().double().numpy());set_flat(m,flat(m)-eta*g)
+    # Last full gradient is saved too, so every path time has an audited g_t.
+    g_last=gvec(m,x,y).detach().cpu().double().numpy();gs.append(g_last)
+    return np.stack(th),np.stack(ph),np.stack(js),np.stack(gs),np.asarray(ls)
+
+def per_example_bank(theta_path,x,y,seed,fraction,eta):
+    """Lossless complete finite-population banks Z[t,i,:], centered exactly."""
+    n,d=N_DATA,theta_path.shape[1];banks=np.empty((HMAX+1,n,d),np.float64);means=[];center_norm=[];methods=[]
+    m=new_model()
+    for t,theta in enumerate(theta_path):
+        set_flat(m,theta)
+        rows=[];method="loop"
+        # vmap is preferred, but its compatibility differs across Colab torch builds.
+        try:
+            from torch.func import functional_call,grad,vmap
+            params=dict(m.named_parameters());buffers=dict(m.named_buffers())
+            def one_loss(pa,bu,xx,yy): return F.cross_entropy(functional_call(m,(pa,bu),(xx.unsqueeze(0),)),yy.unsqueeze(0))
+            one_grad=grad(one_loss)
+            for start in range(0,n,32):
+                tree=vmap(one_grad,in_dims=(None,None,0,0))(params,buffers,x[start:start+32],y[start:start+32])
+                rows.append(torch.cat([tree[name].reshape(len(x[start:start+32]),-1) for name in params],dim=1).detach().cpu().double().numpy())
+            method="torch.func.vmap"
+        except Exception:
+            rows=[]
+            for i in range(n): rows.append(gvec(m,x[i:i+1],y[i:i+1]).detach().cpu().double().numpy()[None,:])
+            method="safe-per-example-loop"
+        G=np.concatenate(rows,axis=0)
+        if G.shape!=(n,d): die("Per-example gradient bank has invalid shape")
+        mean=G.mean(0);Z=G-mean[None,:];banks[t]=Z;means.append(mean);center_norm.append(float(np.linalg.norm(Z.mean(0))));methods.append(method)
+        log(f"complete per-example bank seed={seed} fraction={fraction} eta={eta} t={t}/{HMAX}; method={method}; centered-norm={center_norm[-1]:.3e}")
+    return banks,np.stack(means),np.asarray(center_norm),methods
+
+# ============================================================================

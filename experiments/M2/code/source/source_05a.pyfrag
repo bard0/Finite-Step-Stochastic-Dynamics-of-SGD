@@ -1,0 +1,60 @@
+
+    # New independent M2 scientific raw pools begin strictly after prediction freeze.
+    freeze_hash=sha256(PFC)
+    for q in states:
+        s,f=int(q["seed"]),float(q["fraction"]);theta0=torch.as_tensor(q["theta"]).cpu().double().numpy()
+        for eta in C["etas"]:
+            gdphi=np.load(DET/f"{path_tag(s,f,eta)}.npz",allow_pickle=False)["phi_gd"]
+            for b in C["batches"]:
+                for process in ("IND_SUBSET","RR"):
+                    for pool,ntraj in (("TARGET",C["n_target"]),("AUDIT",C["n_audit"])):
+                        rp=RAW/f"{cond_tag(s,f,eta,b)}_{process}_{pool}.npz"
+                        if valid_complete(rp):
+                            z=np.load(rp,allow_pickle=False)
+                            if str(z["prediction_csv_sha256"].item())!=freeze_hash: die("Raw M2 block bound to another prediction freeze")
+                            sp=SCI/(rp.stem+".json")
+                            if not sp.exists():
+                                atomic_json(sp,{"raw_path":str(rp.relative_to(OUT)),"raw_sha256":sha256(rp),"pool":pool,"process":process,"recovered_on_resume_utc":utc()});mirror_file(sp)
+                            continue
+                        dev=nonlinear_pool(theta0,gdphi,eta,b,process,pool,s,f,ntraj)
+                        save_complete_npz(rp,delta_phi=dev,horizons=np.asarray(HORIZONS),seed=np.array(s),fraction=np.array(f),eta=np.array(eta),B=np.array(b),N=np.array(N_DATA),process=np.array(process),pool=np.array(pool),rng_label=np.array(f"M2-scientific/{process}/{pool}/{s}/{f}/{eta}/{b}"),prediction_csv_sha256=np.array(freeze_hash));mirror_complete(rp)
+                        sp=SCI/(rp.stem+".json");atomic_json(sp,{"raw_path":str(rp.relative_to(OUT)),"raw_sha256":sha256(rp),"pool":pool,"process":process,"completed_utc":utc()});mirror_file(sp);log("completed "+rp.name)
+                        gc.collect()
+                        if torch.cuda.is_available(): torch.cuda.empty_cache()
+
+    # ------------------------------------------------------------------------
+    # Analysis: all tables and decision inputs are saved before any figure.
+    # ------------------------------------------------------------------------
+    frozen=np.load(PFN,allow_pickle=False);observed={};rr_rep=[];ind_rep=[];delta_rep=[];condition_rows=[];delta_rows=[];epoch_rows=[]
+    for q in states:
+        s,f=int(q["seed"]),float(q["fraction"])
+        for eta in C["etas"]:
+            for b in C["batches"]:
+                raw={}
+                for process in ("RR","IND_SUBSET"):
+                    for pool in ("TARGET","AUDIT"):
+                        raw[process,pool]=np.load(RAW/f"{cond_tag(s,f,eta,b)}_{process}_{pool}.npz",allow_pickle=False)["delta_phi"]
+                for hi,horizon in enumerate(HORIZONS):
+                    key=f"s{s}_f{ft(f)}_e{ft(eta)}_B{b}_H{horizon}"
+                    crrt,crra=cov(raw["RR","TARGET"][:,hi]),cov(raw["RR","AUDIT"][:,hi])
+                    cind_t,cind_a=cov(raw["IND_SUBSET","TARGET"][:,hi]),cov(raw["IND_SUBSET","AUDIT"][:,hi])
+                    cp_rr,cp_diag,cp_frozen=frozen[f"C_RR_{key}"],frozen[f"C_DIAG_{key}"],frozen[f"C_FROZEN_RR_{key}"]
+                    delta_t,delta_a,delta_p=sym(crrt-cind_t),sym(crra-cind_a),sym(cp_rr-cp_diag)
+                    observed[f"RR_T_{key}"],observed[f"RR_A_{key}"],observed[f"IND_T_{key}"],observed[f"IND_A_{key}"],observed[f"DELTA_T_{key}"],observed[f"DELTA_A_{key}"]=crrt,crra,cind_t,cind_a,delta_t,delta_a
+                    rrep,irep,drep=covariance_replication(crrt,crra),covariance_replication(cind_t,cind_a),delta_replication(delta_t,delta_a)
+                    base={"seed":s,"fraction":f,"eta":eta,"B":b,"H":horizon,"matrix_key":key,"H_epoch":N_DATA//b,"epoch_index":(horizon-1)//(N_DATA//b)+1,"within_epoch_position":(horizon-1)%(N_DATA//b)+1,"epoch_end":bool(horizon%(N_DATA//b)==0)}
+                    rrrep={**base,**{"rep_"+k:v for k,v in rrep.items()},"process":"RR"};indrep={**base,**{"rep_"+k:v for k,v in irep.items()},"process":"IND_SUBSET"};rr_rep.append(rrrep);ind_rep.append(indrep)
+                    # Base covariance resolution is assessed independently before any DeltaC claim.
+                    rr_ok=bool(rrep["matrix_cosine"]>=.8 and rrep["fro_error"]<=.5 and .5<=rrep["trace_ratio_audit_over_target"]<=2 and np.isfinite(list(rrep.values())).all())
+                    ind_ok=bool(irep["matrix_cosine"]>=.8 and irep["fro_error"]<=.5 and .5<=irep["trace_ratio_audit_over_target"]<=2 and np.isfinite(list(irep.values())).all())
+                    d_ok=bool(rr_ok and ind_ok and drep["delta_rep_cosine"]>=.5 and drep["delta_rep_discrepancy"]<=1.0 and np.isfinite(list(drep.values())).all())
+                    drow={**base,**drep,"rr_covariance_resolved":rr_ok,"ind_covariance_resolved":ind_ok,"difference_resolved":d_ok,"relative_temporal_effect":float(np.linalg.norm(delta_t,"fro")/max(np.linalg.norm(cind_t,"fro"),EPS))}
+                    drow.update(delta_metrics(delta_t,delta_p));drow["predicted_relative_temporal_effect"]=float(np.linalg.norm(delta_p,"fro")/max(np.linalg.norm(cp_diag,"fro"),EPS));drow["observed_epoch_trace_ratio"]=float(np.trace(crrt)/max(np.trace(cind_t),EPS));drow["predicted_epoch_trace_ratio"]=float(np.trace(cp_rr)/max(np.trace(cp_diag),EPS));delta_rows.append(drow);delta_rep.append({**base,**drep,"rr_covariance_resolved":rr_ok,"ind_covariance_resolved":ind_ok,"difference_resolved":d_ok})
+                    # RR absolute prediction, its causal matched diagonal baseline, and frozen-time RR sensitivity.
+                    for process,target,predm in (("RR",crrt,cp_rr),("IND_SUBSET",cind_t,cp_diag)):
+                        primary=cov_metrics(target,predm);diag=cov_metrics(target,cp_diag);frozen_m=cov_metrics(target,cp_frozen)
+                        row={**base,"process":process,**primary,"diag_fro_skill":diag["fro_skill"],"diag_matrix_cosine":diag["matrix_cosine"],"frozen_rr_fro_skill":frozen_m["fro_skill"],"frozen_rr_matrix_cosine":frozen_m["matrix_cosine"]}
+                        condition_rows.append(row)
+                    epoch_rows.append({**base,"rr_target_trace":float(np.trace(crrt)),"ind_target_trace":float(np.trace(cind_t)),"rr_prediction_trace":float(np.trace(cp_rr)),"ind_prediction_trace":float(np.trace(cp_diag)),"target_trace":float(np.trace(crrt)),"prediction_trace":float(np.trace(cp_rr)),"rr_ind_trace_ratio_target":float(np.trace(crrt)/max(np.trace(cind_t),EPS)),"rr_ind_trace_ratio_prediction":float(np.trace(cp_rr)/max(np.trace(cp_diag),EPS)),"delta_norm_target":float(np.linalg.norm(delta_t,"fro")),"delta_norm_prediction":float(np.linalg.norm(delta_p,"fro")),"relative_temporal_effect":drow["relative_temporal_effect"]})
+
+    results=pd.DataFrame(condition_rows);deltas=pd.DataFrame(delta_rows);rrdf=pd.DataFrame(rr_rep);inddf=pd.DataFrame(ind_rep);drepdf=pd.DataFrame(delta_rep);epochdf=pd.DataFrame(epoch_rows)

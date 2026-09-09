@@ -1,0 +1,120 @@
+# Stage M2 — temporal covariance under random reshuffling
+# Zero-fit prediction of random-reshuffling covariance from explicit temporal
+# gradient-noise correlations.
+
+import os, re, gc, json, math, shutil, zipfile, hashlib, platform, traceback
+from pathlib import Path
+from datetime import datetime, timezone
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+try:
+    import sympy.printing  # compatibility import
+except Exception:
+    pass
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from scipy.linalg import subspace_angles
+from scipy.stats import spearmanr
+
+# ============================================================================
+# 0. PRE-REGISTERED CONFIGURATION. Change RUN_MODE manually only.
+# ============================================================================
+RUN_MODE = "full"  # manually change to "full" after a successful smoke run
+RESUME = True
+MASTER_SEED = 20260905
+PROTOCOL_VERSION = "M2-RR-temporal-covariance-v1"
+DRIVE_ROOT = Path(os.environ.get("SGD_PROJECT_ROOT", "./artifacts")).expanduser().resolve()
+RUN_ROOT = Path(os.environ.get("SGD_RUN_ROOT", "./runs")).expanduser().resolve()
+M1_SOURCE = Path(os.environ.get("M1_SOURCE", str(DRIVE_ROOT / "M1_finite_horizon_covariance"))).expanduser().resolve()
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+DTYPE = torch.float64
+N_DATA, OBS_DIM, TOP_K, EPS = 256, 5, 3, 1e-30
+
+MODE = {
+    "smoke": dict(seeds=(51,), fractions=(.25,), etas=(.05,), batches=(32,64), hmax=8,
+                  horizons=(1,2,4,8), tangent_draws=16, n_target=12, n_audit=12,
+                  bootstrap_draws=200, temporal_audit_draws=64, projection_audit_dim=4),
+    "full": dict(seeds=(51,52,53,54,55,56), fractions=(.25,.55,.85), etas=(.025,.05,.10), batches=(16,32,64,128), hmax=16,
+                 horizons=(1,2,4,8,10,16), tangent_draws=128, n_target=128, n_audit=128,
+                 bootstrap_draws=5000, temporal_audit_draws=256, projection_audit_dim=8),
+}
+if RUN_MODE not in MODE: raise ValueError("RUN_MODE must be smoke/full")
+C = MODE[RUN_MODE]; HMAX = int(C["hmax"]); HORIZONS = tuple(C["horizons"])
+if max(HORIZONS) != HMAX or min(HORIZONS) < 1: raise ValueError("Invalid horizon configuration")
+if any(N_DATA % b for b in C["batches"]): raise ValueError("RR batch grid must divide N=256")
+
+# ============================================================================
+# 1. Atomic checkpoints, Drive mirroring, and RNG labels.
+# ============================================================================
+class ProtocolStop(RuntimeError): pass
+def utc(): return datetime.now(timezone.utc).isoformat()
+def log(x): print(f"[{utc()}] {x}", flush=True)
+def die(x): raise ProtocolStop(x)
+def seed_of(*parts):
+    text="|".join(map(str,(MASTER_SEED,PROTOCOL_VERSION,RUN_MODE)+parts))
+    return int(hashlib.sha256(text.encode()).hexdigest()[:16],16)%(2**63-1)
+def set_seed(s):
+    np.random.seed(s%(2**32-1));torch.manual_seed(s)
+    if torch.cuda.is_available(): torch.cuda.manual_seed_all(s)
+def jdefault(x):
+    if isinstance(x,Path): return str(x)
+    if isinstance(x,np.ndarray): return x.tolist()
+    if isinstance(x,(np.integer,)): return int(x)
+    if isinstance(x,(np.floating,)): return float(x)
+    if isinstance(x,(np.bool_,)): return bool(x)
+    raise TypeError(type(x))
+def sha256(p):
+    h=hashlib.sha256()
+    with open(p,"rb") as f:
+        for b in iter(lambda:f.read(1<<20),b""): h.update(b)
+    return h.hexdigest()
+def atomic_text(p,s):
+    p=Path(p);p.parent.mkdir(parents=True,exist_ok=True);q=p.with_name(p.name+".tmp")
+    with open(q,"w",encoding="utf8") as f: f.write(s);f.flush();os.fsync(f.fileno())
+    os.replace(q,p)
+def atomic_json(p,x): atomic_text(p,json.dumps(x,indent=2,ensure_ascii=False,default=jdefault))
+def atomic_npz(p,**x):
+    p=Path(p);p.parent.mkdir(parents=True,exist_ok=True);q=p.with_name(p.stem+".tmp.npz")
+    np.savez_compressed(q,**x)
+    with open(q,"rb") as f: os.fsync(f.fileno())
+    os.replace(q,p)
+def complete_path(p): return Path(str(p)+".completion.json")
+def save_complete_npz(p,**x):
+    atomic_npz(p,**x);atomic_json(complete_path(p),{"sha256":sha256(p),"completed_utc":utc()})
+def valid_complete(p):
+    try: return Path(p).exists() and complete_path(p).exists() and json.loads(complete_path(p).read_text())["sha256"]==sha256(p)
+    except Exception: return False
+def atomic_copy(a,b):
+    a,b=Path(a),Path(b);b.parent.mkdir(parents=True,exist_ok=True);q=b.with_name(b.name+".tmp")
+    shutil.copy2(a,q)
+    with open(q,"rb") as f: os.fsync(f.fileno())
+    os.replace(q,b)
+OUT=OUTD=FIG=None
+def mirror_file(p):
+    p=Path(p)
+    if OUT is None or OUTD is None or not p.exists(): return
+    q=OUTD/p.relative_to(OUT)
+    if not q.exists() or sha256(p)!=sha256(q): atomic_copy(p,q)
+def mirror_complete(p):
+    mirror_file(p)
+    if complete_path(p).exists(): mirror_file(complete_path(p))
+def mirror_tree():
+    for p in sorted(OUT.rglob("*")):
+        if p.is_file(): mirror_file(p)
+def ft(x): return str(float(x)).replace(".","p")
+def state_tag(s,f): return f"seed{int(s)}_fraction{ft(f)}"
+def path_tag(s,f,e): return f"{state_tag(s,f)}_eta{ft(e)}"
+def cond_tag(s,f,e,b): return f"{path_tag(s,f,e)}_B{int(b)}"
+
+# ============================================================================
+# 2. Exact immutable M1 model family and differential primitives.
+# ============================================================================
+class TinyCNN(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.f=nn.Sequential(nn.Conv2d(3,8,3,padding=1),nn.Tanh(),nn.AvgPool2d(2),nn.Conv2d(8,12,3,padding=1),nn.Tanh(),nn.AdaptiveAvgPool2d(1))
+        self.h=nn.Linear(12,10)
+    def forward(self,x): return self.h(self.f(x).flatten(1))
+def new_model(dtype=DTYPE): return TinyCNN().to(DEVICE,dtype=dtype)

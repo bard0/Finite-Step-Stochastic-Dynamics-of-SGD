@@ -1,0 +1,120 @@
+# 5. Exact RR/IND samplers, formula audits, and matrix-free tangent predictors.
+# ============================================================================
+def ind_subset(rng,b): return rng.choice(N_DATA,size=int(b),replace=False)
+def rr_batches(rng,b,hmax):
+    """Exactly one fresh uniform permutation each epoch; no in-epoch reuse."""
+    e=N_DATA//int(b);out=[]
+    for t in range(hmax):
+        if t%e==0: perm=rng.permutation(N_DATA)
+        pos=t%e;out.append(perm[pos*b:(pos+1)*b])
+    return out
+def cross_cov(a,b):
+    aa=a-a.mean(0,keepdims=True);bb=b-b.mean(0,keepdims=True);return aa.T@bb/(len(a)-1)
+
+def temporal_formula_audit(banks,b,seed,fraction,eta):
+    """Projection-only independent MC verification of the stated K_st formulas."""
+    d=banks.shape[2];r=np.random.default_rng(seed_of("formula-directions",seed,fraction,eta,b));R=r.normal(size=(d,C["projection_audit_dim"]));R/=np.maximum(np.linalg.norm(R,axis=0,keepdims=True),EPS)
+    draws=int(C["temporal_audit_draws"]);epoch=N_DATA//b;records=[]
+    # Projected gradients retain a lossless audit of selected contractions, not a claim about full K_st.
+    D=np.einsum("tnd,dr->tnr",banks,R)
+    rng=np.random.default_rng(seed_of("formula-mc",seed,fraction,eta,b));samples=np.empty((draws,HMAX,C["projection_audit_dim"]))
+    for q in range(draws):
+        for t,ids in enumerate(rr_batches(rng,b,HMAX)): samples[q,t]=D[t,ids].mean(0)
+    for s in range(HMAX):
+        gamma_ss=D[s].T@D[s]/N_DATA;analytic=(N_DATA-b)/(b*(N_DATA-1))*gamma_ss;emp=cross_cov(samples[:,s],samples[:,s])
+        records.append(dict(seed=seed,fraction=fraction,eta=eta,B=b,s=s,t=s,same_epoch=True,kind="same_time",analytic_fro=float(np.linalg.norm(analytic,"fro")),empirical_fro=float(np.linalg.norm(emp,"fro")),relative_error=float(np.linalg.norm(emp-analytic,"fro")/max(np.linalg.norm(analytic,"fro"),EPS)),analytic_trace=float(np.trace(analytic)),empirical_trace=float(np.trace(emp))))
+        for t in range(s+1,HMAX):
+            same=(s//epoch)==(t//epoch);gamma=D[s].T@D[t]/N_DATA;analytic=(-gamma/(N_DATA-1)) if same else np.zeros_like(gamma);emp=cross_cov(samples[:,s],samples[:,t])
+            records.append(dict(seed=seed,fraction=fraction,eta=eta,B=b,s=s,t=t,same_epoch=bool(same),kind="cross_time",analytic_fro=float(np.linalg.norm(analytic,"fro")),empirical_fro=float(np.linalg.norm(emp,"fro")),relative_error=float(np.linalg.norm(emp-analytic,"fro")/max(np.linalg.norm(analytic,"fro"),1e-12)),analytic_trace=float(np.trace(analytic)),empirical_trace=float(np.trace(emp))))
+    return pd.DataFrame(records)
+
+def matched_marginal_audit(banks,b,seed,fraction,eta):
+    """Pre-freeze audit: RR and IND share each one-step WOR marginal."""
+    d=banks.shape[2];r=np.random.default_rng(seed_of("marginal-directions",seed,fraction,eta,b));R=r.normal(size=(d,C["projection_audit_dim"]));R/=np.maximum(np.linalg.norm(R,axis=0,keepdims=True),EPS)
+    D=np.einsum("tnd,dr->tnr",banks,R);q=int(C["temporal_audit_draws"]);rng_i=np.random.default_rng(seed_of("marginal-ind",seed,fraction,eta,b));rng_r=np.random.default_rng(seed_of("marginal-rr",seed,fraction,eta,b));rows=[]
+    for t in range(HMAX):
+        ind=np.stack([D[t,ind_subset(rng_i,b)].mean(0) for _ in range(q)])
+        rr=np.stack([D[t,rr_batches(rng_r,b,HMAX)[t]].mean(0) for _ in range(q)])
+        ci,cr=cov(ind),cov(rr);mi,mr=ind.mean(0),rr.mean(0)
+        rows.append(dict(seed=seed,fraction=fraction,eta=eta,B=b,t=t,mean_difference_norm=float(np.linalg.norm(mi-mr)),ind_trace=float(np.trace(ci)),rr_trace=float(np.trace(cr)),trace_ratio=float(np.trace(cr)/max(np.trace(ci),EPS)),cov_relative_difference=float(np.linalg.norm(ci-cr,"fro")/max(np.linalg.norm(ci,"fro"),EPS))))
+    return pd.DataFrame(rows)
+
+def tangent_predict(theta_path,jacobians,banks,eta,b,seed,fraction):
+    """D=independent WOR subsets; K=RR permutation. B2=frozen-time RR optional."""
+    d=theta_path.shape[1];out={name:{h:[] for h in HORIZONS} for name in ("DIAG","RR","FROZEN_RR")}
+    ri=np.random.default_rng(seed_of("predictor-ind",seed,fraction,eta,b));rr=np.random.default_rng(seed_of("predictor-rr",seed,fraction,eta,b));rf=np.random.default_rng(seed_of("predictor-frozen",seed,fraction,eta,b));mcur=new_model();mzero=new_model()
+    for q in range(C["tangent_draws"]):
+        vi=np.zeros(d);vr=np.zeros(d);vf=np.zeros(d);rr_ids=rr_batches(rr,b,HMAX);fr_ids=rr_batches(rf,b,HMAX)
+        for t in range(HMAX):
+            zi=banks[t,ind_subset(ri,b)].mean(0);zr=banks[t,rr_ids[t]].mean(0);zf=banks[0,fr_ids[t]].mean(0)
+            set_flat(mcur,theta_path[t]);vi=vi-eta*hvp(mcur,X,Y,torch.as_tensor(vi,device=DEVICE,dtype=DTYPE)).detach().cpu().numpy()-eta*zi
+            set_flat(mcur,theta_path[t]);vr=vr-eta*hvp(mcur,X,Y,torch.as_tensor(vr,device=DEVICE,dtype=DTYPE)).detach().cpu().numpy()-eta*zr
+            set_flat(mzero,theta_path[0]);vf=vf-eta*hvp(mzero,X,Y,torch.as_tensor(vf,device=DEVICE,dtype=DTYPE)).detach().cpu().numpy()-eta*zf
+            h=t+1
+            if h in out["DIAG"]:
+                J=jacobians[h];out["DIAG"][h].append(J@vi);out["RR"][h].append(J@vr);out["FROZEN_RR"][h].append(J@vf)
+    return {name:{h:cov(v) for h,v in byh.items()} for name,byh in out.items()}
+
+# ============================================================================
+# 6. Fresh nonlinear M2 TARGET/AUDIT rollouts.  No M1 stochastic outcome is
+#    read anywhere in this section.
+# ============================================================================
+def nonlinear_pool(theta0,gd_phi,eta,b,process,pool,seed,fraction,ntraj):
+    rng=np.random.default_rng(seed_of("M2-scientific",process,pool,seed,fraction,eta,b));out=np.zeros((ntraj,len(HORIZONS),OBS_DIM),np.float64);where={h:i for i,h in enumerate(HORIZONS)}
+    for q in range(ntraj):
+        m=new_model();set_flat(m,theta0);rr_ids=None
+        for t in range(HMAX):
+            if process=="IND_SUBSET": ids=ind_subset(rng,b)
+            elif process=="RR":
+                if t%(N_DATA//b)==0: rr_ids=rr_batches(rng,b,HMAX-t)
+                # rr_batches returns a sequence from the epoch boundary.  At
+                # t>0 within epoch its local position selects the next chunk.
+                ids=rr_ids[t%(N_DATA//b)]
+            else: die("Unknown process")
+            ii=torch.as_tensor(ids,device=DEVICE,dtype=torch.long);g=gvec(m,X[ii],Y[ii]);set_flat(m,flat(m)-eta*g)
+            h=t+1
+            if h in where: out[q,where[h]]=phi(m,PROBE,FP)-gd_phi[h]
+    return out
+
+def covariance_replication(target,audit):
+    m=cov_metrics(target,audit);a,b=esum(target),esum(audit)
+    m["trace_ratio_audit_over_target"]=float(b["trace"]/max(a["trace"],EPS));return m
+
+def delta_replication(dt,da):
+    at,aa=esum(dt,True),esum(da,True);den=max(.5*(at["fro"]+aa["fro"]),EPS)
+    return dict(delta_rep_cosine=float(np.sum(sym(dt)*sym(da))/max(at["fro"]*aa["fro"],EPS)),
+      delta_rep_discrepancy=float(np.linalg.norm(sym(dt)-sym(da),"fro")/den),
+      delta_trace_target=at["trace"],delta_trace_audit=aa["trace"],
+      delta_norm_target=at["fro"],delta_norm_audit=aa["fro"])
+
+def bootstrap(values,draws,key):
+    z=np.asarray(values,float);z=z[np.isfinite(z)]
+    if not len(z): return dict(mean=np.nan,ci_low=np.nan,ci_high=np.nan,n_seeds=0)
+    r=np.random.default_rng(seed_of("bootstrap",key));means=z[r.integers(0,len(z),size=(int(draws),len(z)))].mean(1)
+    return dict(mean=float(z.mean()),ci_low=float(np.quantile(means,.025)),ci_high=float(np.quantile(means,.975)),n_seeds=int(len(z)))
+
+def archive_manifest(root):
+    return {"generated_utc":utc(),"files":[{"path":str(p.relative_to(root)),"bytes":p.stat().st_size,"sha256":sha256(p)} for p in sorted(root.rglob("*")) if p.is_file() and not p.name.endswith(".zip")]}
+
+def figure_guard(name,fn,failures):
+    """A plotting bug must never invalidate already-saved science tables."""
+    try: fn()
+    except Exception as e:
+        failures.append({"figure":name,"error":repr(e),"traceback":traceback.format_exc()})
+        log(f"POST-SCIENCE PLOTTING FAILURE in {name}: {e!r}; tables/decision remain valid")
+
+def finish_fig(name):
+    p=FIG/name;plt.tight_layout();plt.savefig(p,dpi=150,bbox_inches="tight");plt.close();mirror_file(p)
+
+def make_figures(results,delta_rows,epoch_rows,seed_summary):
+    required={"H","process","target_trace","prediction_trace","fro_skill","matrix_cosine"}
+    if not required.issubset(results.columns): raise RuntimeError("Figure inputs lack required columns: "+str(required-set(results.columns)))
+    failures=[]
+    def f1():
+        plt.figure(figsize=(8,4))
+        for process in ("RR","IND_SUBSET"):
+            q=epoch_rows[epoch_rows.process==process].groupby("H").target_trace.mean();plt.plot(q.index,q.values,"o-",label=process)
+        for b in C["batches"]:
+            for h in range(N_DATA//b,HMAX+1,N_DATA//b): plt.axvline(h,color="gray",lw=.4,alpha=.25)
+        plt.legend();plt.xlabel("step / horizon");plt.ylabel("TARGET covariance trace");plt.title("RR vs IND covariance traces; verticals=epoch boundaries");finish_fig("01_rr_ind_trace_by_step.png")
+    def f2():

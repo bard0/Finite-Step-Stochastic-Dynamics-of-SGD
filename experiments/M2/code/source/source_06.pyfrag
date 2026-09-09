@@ -1,0 +1,47 @@
+    atomic_text(OUT/"README.md",f"# Stage M2 — RR temporal covariance\n\nM1 immutable platform: `{M1_SOURCE}`. M2 uses new independent RR/IND_SUBSET TARGET/AUDIT trajectories only after a frozen zero-fit predictor. Primary causal comparison: RR versus independently redrawn without-replacement subsets, which have matched one-step marginals.\n")
+    atomic_text(OUT/"code_audit_report.md","""# Static code audit
+
+- exact M1 immutable platform is verified before M2 work; no new network training;
+- all N=256 per-example gradients are used and centered at each deterministic path time;
+- IND_SUBSET uses distinct examples within each step and independent redraws between steps;
+- RR consumes consecutive non-overlapping permutation chunks and resets at epoch boundaries;
+- one-step matched-marginal and analytic K_st audits precede prediction freeze;
+- tangent HVPs are float64 and matrix-free; no dense parameter covariance/Hessian is built;
+- RR/IND TARGET/AUDIT pools are fresh, independent, and recompute gradients at current stochastic state;
+- DeltaC is distinct from all base covariance objects and never PSD-clipped;
+- covariance/difference replication precedes predictor verdict logic; bootstrap unit is network seed;
+- raw arrays and analysis tables are saved before figures; plotting failures are recorded without corrupting tables;
+- atomic Drive mirroring and a final validated ZIP are implemented.
+
+This is a static audit, not a runtime/numerical/scientific validation.
+""")
+    for p in (OUT/"decision.json",OUT/"decision_report.md",OUT/"README.md",OUT/"code_audit_report.md"): mirror_file(p)
+    # Figures are deliberately after scientific tables and decision; failures are non-destructive.
+    make_figures(results,deltas,epochdf,seed_summary)
+    atomic_json(OUT/"environment.json",{"python":platform.python_version(),"torch":torch.__version__,"cuda":torch.cuda.is_available(),"device":str(DEVICE),"numpy":np.__version__,"pandas":pd.__version__})
+    atomic_json(OUT/"artifact_manifest.json",archive_manifest(OUT));mirror_tree()
+    zlocal=RUN_ROOT/(OUT.name+"_results.zip")
+    with zipfile.ZipFile(zlocal,"w",zipfile.ZIP_DEFLATED,allowZip64=True) as z:
+        for p in sorted(OUT.rglob("*")):
+            if p.is_file(): z.write(p,p.relative_to(OUT.parent))
+    with zipfile.ZipFile(zlocal,"r") as z:
+        if z.testzip() is not None: die("Final ZIP integrity test failed")
+    zdrive=DRIVE_ROOT/zlocal.name;atomic_copy(zlocal,zdrive)
+    log(f"FINAL DIAGNOSIS: {diagnosis}");log(f"Result folder: {OUTD}");log(f"ZIP: {zdrive}");log("Save the final ZIP outside Colab as an additional durable copy.")
+
+try:
+    main()
+except Exception as exc:
+    failure={"diagnosis":"M2-6","time_utc":utc(),"error":repr(exc),"traceback":traceback.format_exc()}
+    print("M2-6 — PROTOCOL / NUMERICAL FAILURE. No scientific conclusion is justified.",flush=True);print(failure["traceback"],flush=True)
+    if OUT is not None:
+        try:
+            atomic_json(OUT/"runtime_failure.json",failure);atomic_json(OUT/"decision.json",failure);atomic_text(OUT/"decision_report.md","FINAL DIAGNOSIS: M2-6\n\nPROTOCOL / NUMERICAL FAILURE. No scientific conclusion is justified.\n")
+            for p in (OUT/"runtime_failure.json",OUT/"decision.json",OUT/"decision_report.md"): mirror_file(p)
+            mirror_tree();zlocal=RUN_ROOT/(OUT.name+"_FAILED.zip")
+            with zipfile.ZipFile(zlocal,"w",zipfile.ZIP_DEFLATED,allowZip64=True) as z:
+                for p in sorted(OUT.rglob("*")):
+                    if p.is_file(): z.write(p,p.relative_to(OUT.parent))
+            if OUTD is not None: atomic_copy(zlocal,DRIVE_ROOT/zlocal.name)
+        except Exception as archive_error: print("Failure archive failed:",repr(archive_error),flush=True)
+    raise
