@@ -1,17 +1,13 @@
-# Data and artifact policy
+# Artifact policy
 
-The working project contains result archives ranging from tens of megabytes to multiple gigabytes.
+This repository contains the public scientific record of the project.
 
-To keep the Git repository practical, version 1.0 includes:
-- exact execution scripts where directly recoverable;
-- experiment configuration and decision files;
-- summary CSV tables;
-- provenance and numerical-audit reports.
+Included:
+- experiment descriptions;
+- compact reproducibility materials;
+- configurations and summaries;
+- documented scientific decisions.
 
-Excluded:
-- raw trajectory blocks;
-- model checkpoints;
-- large `.pt`, `.npz`, and generated cache trees;
-- multi-gigabyte result archives.
+Large generated artifacts such as raw trajectories, checkpoints, and extensive numerical archives should be distributed separately through release assets or external archival storage.
 
-These should be attached to a tagged release or deposited in an external archival service if full public reproducibility is required.
+The repository keeps negative and exploratory results when they are important for understanding the research trajectory.
