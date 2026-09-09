@@ -2,25 +2,21 @@
 
 ## Current state
 
-The public repository contains the experiment description and reproducibility requirements for M1.
+Public transfer is complete for the normal Git-history layer of M1.
 
-## Artifact migration policy
+Included in the repository:
 
-Before adding executable sources or generated artifacts, each file is checked for:
+- portable runnable source under `code/`;
+- public configuration;
+- compact completed-run summaries;
+- source provenance and reproducibility notes.
 
-- reproducibility information;
-- removal of local environment paths;
-- removal of temporary execution metadata;
-- absence of private workflow material;
-- consistency with the public claim level.
+The portable source preserves the scientific calculation while replacing environment-specific storage assumptions with configurable local roots.
 
-## Pending public artifacts
+## External artifacts
 
-The following items should be added from the archived research storage when the exact source artifact is available:
+Large raw trajectories, checkpoints, generated tensors, caches, and full archives remain outside normal Git history. They are retained in the research archive and are not required for understanding the public claim boundary.
 
-- experiment configuration;
-- executable source;
-- compact result summaries;
-- provenance information.
+## Public claim boundary
 
-Large raw trajectories, checkpoints and generated caches remain external release artifacts.
+M1 supports zero-fit finite-horizon covariance prediction from local anisotropic gradient noise propagated through deterministic geometry in the tested small-network i.i.d.-minibatch regime. It does not support claims about temporal ordering, universal SGD behavior, generalization, or optimal batch size.
