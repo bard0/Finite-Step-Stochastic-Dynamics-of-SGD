@@ -2,17 +2,30 @@
 
 ## Current priority
 
-1. Consolidate temporal covariance theory.
-2. Complete causal temporal-ordering validation.
-3. Transfer from controlled systems to neural SGD.
-4. Compare against matched marginal baselines.
-5. Prepare paper-level evidence tables.
+1. Consolidate finite-step SGD operator theory.
+2. Formalize descriptor sufficiency and insufficiency questions.
+3. Complete causal temporal-ordering validation.
+4. Connect controlled stochastic systems with neural SGD experiments.
+5. Prepare theorem-level and experiment-level evidence tables.
+
+## Current theoretical direction
+
+The central question has shifted from whether stochastic noise matters to:
+
+Can finite-step SGD dynamics be characterized by a small set of classical stochastic descriptors, or does the discrete stochastic operator contain additional information?
+
+Current candidate direction:
+
+- exact finite-step operator analysis;
+- comparison with diffusion approximations;
+- testing sufficiency of edge-of-stability descriptors;
+- identifying missing stochastic information.
 
 ## Remaining validation gates
 
 ### M7 / T1
 
-Test whether temporal ordering itself causes measurable changes while preserving one-step marginals.
+Test whether temporal organization itself causes measurable changes while preserving one-step marginals.
 
 Controls:
 - original ordering;
@@ -21,7 +34,7 @@ Controls:
 
 ### T2
 
-Future theoretical development after the causal validation stage.
+Theoretical and empirical extension toward descriptor insufficiency and spectral consequences.
 
 ## Claim discipline
 
