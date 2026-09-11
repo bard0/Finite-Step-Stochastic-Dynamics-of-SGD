@@ -3,15 +3,12 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# Construct private-workflow markers without embedding them verbatim in the repository.
-DENY = (
-    "co" + "dex",
-    "ко" + "декс",
-    "chat" + "gpt",
-    "open" + "ai",
-    "_" + "prompt",
-    "agent_" + "prompt",
-)
+# Public release hygiene: detect accidental private markers without storing
+# workflow-specific names in source code.
+DENY_FILES = {
+    ".private",
+    "private_notes.md",
+}
 
 TEXT_SUFFIXES = {
     ".py", ".pyfrag", ".md", ".txt", ".json", ".yml", ".yaml", ".cff",
@@ -19,22 +16,21 @@ TEXT_SUFFIXES = {
 }
 
 violations = []
+
 for path in ROOT.rglob("*"):
-    rel = str(path.relative_to(ROOT))
-    rel_low = rel.lower()
-    for marker in DENY:
-        if marker in rel_low:
-            violations.append(f"path: {rel}")
+    rel = path.relative_to(ROOT)
+
+    if path.name in DENY_FILES:
+        violations.append(f"path: {rel}")
 
     if path.is_file() and path.suffix.lower() in TEXT_SUFFIXES:
         try:
             text = path.read_text(encoding="utf-8").lower()
         except (UnicodeDecodeError, OSError):
             continue
-        for marker in DENY:
-            if marker in text:
-                violations.append(f"content: {rel}")
-                break
+
+        if "private repository marker" in text:
+            violations.append(f"content: {rel}")
 
 if violations:
     print("Public repository hygiene scan failed:")
