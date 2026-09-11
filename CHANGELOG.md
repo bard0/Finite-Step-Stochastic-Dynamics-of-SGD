@@ -1,22 +1,17 @@
 # Changelog
 
-## 1.2.0 — Finite-step operator theory update
+## 1.2.0 — 2026-09-12
 
-- Extended repository scope from temporal covariance analysis to finite-step stochastic dynamics of SGD.
-- Added documentation of the discrete SGD operator viewpoint.
-- Added EoS descriptor insufficiency as an open theoretical direction.
-- Updated roadmap toward causal and spectral validation of finite-step effects.
-- Removed internal workflow terminology from public-facing repository content.
+- Synchronized the repository with the latest project Drive state.
+- Promoted the exact scalar noise-geometry / mean-square stability result.
+- Added M9 controlled comparison artifacts and predictor metrics.
+- Updated claim discipline: projected-noise EoS remains a strong absolute-sharpness baseline; `G_Sigma` is supported mainly by matched-system separation and threshold prediction.
+- Added higher-order covariance-jet theory summary with explicit prior-art limitations.
+- Added the active finite-sample stochastic-stability-boundary branch.
+- Updated paper outline and roadmap.
+- Re-audited repository text for prohibited internal-tool references.
 
-## 1.1.0 — Repository structure update
+## 1.1.0 — 2026-09
 
-- Updated public documentation around finite-step stochastic dynamics.
-- Added experiment structure for M1, M2, M7 and T1.
-- Added claim tracking and reproducibility documentation.
-- Added artifact policy updates.
-- Preserved negative and exploratory research stages.
-
-## 1.0.0 — Public research release
-
-- Initial public repository structure.
-- Added experiment documentation and reproducibility materials.
+- Consolidated finite-step stochastic dynamics framing.
+- Added descriptor sufficiency and theory audit notes.

@@ -1,17 +1,50 @@
-# Paper outline
+# Paper Outline — Noise Geometry and Finite-Step SGD Stability
 
-## Working title
+## 1. Motivation
 
-Temporal stochastic geometry of finite-step stochastic gradient descent.
+Leading local EoS descriptions use curvature and projected gradient-noise magnitude. Ask whether these low-order local descriptors determine finite-step stochastic stability.
 
-## Structure
+## 2. Exact finite-sum counterexample
 
-1. Motivation and problem statement.
-2. Finite-horizon stochastic covariance formulation.
-3. Validation of local curvature-noise mechanisms.
-4. Zero-fit predictive experiments.
-5. Temporal covariance experiments.
-6. Causal ordering controls.
-7. Robustness and limitations.
-8. Relation to previous SGD dynamics literature.
-9. Reproducibility and artifacts.
+Construct matched finite-sum SGD systems with equal population Hessian and equal zero-order gradient-noise covariance but different state-dependent noise geometry.
+
+Derive the exact scalar mean-square coefficient
+
+\[
+q=(1-\eta\lambda)^2+\eta^2G_\Sigma
+\]
+
+and boundary
+
+\[
+\eta_c=2\lambda/(\lambda^2+G_\Sigma).
+\]
+
+## 3. Descriptor-insufficiency statement
+
+Formulate the result as an existence theorem: `(H, Sigma(0))` and analogous zero-order EoS descriptors are not, in general, sufficient statistics for finite-step mean-square stability.
+
+## 4. Controlled M9 comparison
+
+Use frozen predictors and disjoint EST/EVAL seeds. Report system-level and matched A-B threshold/sharpness metrics.
+
+Emphasize that the projected-noise baseline remains strong for the absolute sharpness gap; the incremental value of `G_Sigma` is strongest in matched differences and threshold prediction.
+
+## 5. Multidimensional extension
+
+Present the exact quadratic-Lyapunov drift and the noise-geometry LMI. Clearly distinguish theorem from conjectured neural relevance.
+
+## 6. Relation to prior work
+
+Position relative to stochastic EoS, discrete finite-step SGD, stochastic modified equations, multiplicative-noise stability, and weak stochastic expansions.
+
+## 7. Limitations
+
+- controlled low-dimensional family;
+- no claim that `G_Sigma` is universally sufficient;
+- genuine minibatch and neural validation still required;
+- higher-order covariance jets have substantial prior-art overlap.
+
+## 8. Falsification experiments
+
+Finite-sum minibatch replication, multidimensional noncommuting control, and held-out neural prediction against GNS/Hessian/projected-noise baselines.

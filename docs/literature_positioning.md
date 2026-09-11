@@ -1,35 +1,54 @@
-# Literature positioning
+# Literature Positioning
 
-## Scope
+## Scope of the claim
 
-The repository studies finite-step stochastic dynamics of SGD as a discrete stochastic dynamical system.
+The project does **not** claim that state-dependent SGD noise, multiplicative noise, higher cumulants, mean-square stability, or finite-step weak expansions are new.
 
-The central question is not whether stochasticity influences SGD, which is established, but whether finite-step dynamics contain predictive and mechanistic information beyond classical descriptors such as local curvature and marginal gradient-noise statistics.
+The current candidate contribution is narrower:
 
-## Relation to prior directions
+> standard low-order local EoS / noise-amplitude descriptors need not be sufficient to determine finite-step mean-square stability; an explicit finite-sum construction and controlled comparison isolate a state-dependent noise-geometry term with a measurable stability consequence.
 
-### Curvature and gradient-noise analyses
+## Primary comparators
 
-Existing work studies projected gradient noise, Hessian interactions, sharpness, and local stochastic dynamics. This project investigates whether these descriptors provide a sufficient description of finite-step stochastic evolution.
+### Liao et al. (2026) — stochastic sharpness gap
 
-### Diffusion and stochastic modified equation approaches
+Liao et al. provide a leading-order EoS description involving curvature/nonlinear stabilization and projected gradient-noise variance. This repository treats that framework as a baseline, not an opponent.
 
-Continuous approximations provide useful asymptotic descriptions. The current direction focuses on identifying regimes where discrete finite-step effects cannot be reduced to diffusion-level statistics.
+M9 is consistent with this distinction: the projected-noise model already explains most of the absolute sharpness gap, while the additional noise-geometry descriptor is most visible in matched-system differences and threshold prediction.
 
-### Random reshuffling and temporal dependence
+### Ignashin et al. (2026) — finite-step discrete SGD
 
-Temporal dependence is an established phenomenon. The project tests whether temporal organization carries additional predictive information after matching marginal statistics.
+Ignashin et al. motivate starting from the discrete SGD transition law rather than assuming a Brownian closure. The present project shares that finite-step viewpoint but asks a different question: which compressed stochastic descriptors retain enough information for stability and prediction?
 
-## Positioning against recent SGD work
+## Adjacent established areas
 
-The project should be compared explicitly with recent analyses of SGD stochastic dynamics, including Liao et al. (2026) and Ignashin et al. (2026), while restricting claims to experimentally and theoretically supported regimes.
+Any novelty statement must be checked against:
 
-## Core distinction
+- stochastic modified equations and weak approximations of SGD;
+- Talay–Tubaro / stochastic B-series expansions;
+- Kramers–Moyal and higher-cumulant descriptions;
+- multiplicative-noise and state-dependent diffusion theory;
+- stochastic approximation and mean-square stability of random linear systems;
+- random reshuffling / without-replacement SGD;
+- Hessian-aware stochastic dynamics and local stability analyses.
 
-The central object is the finite-step stochastic operator:
+## Safe wording
 
-`P_eta f(theta) = E[f(theta - eta g_B(theta))]`
+Appropriate:
 
-rather than only scalar noise magnitude or diffusion coefficients.
+- "descriptor insufficiency";
+- "explicit finite-sum realization";
+- "finite-step mean-square stability consequence";
+- "controlled incremental predictive value in the tested family".
 
-A key open problem is whether commonly used descriptors form a sufficient statistic for this operator.
+Avoid:
+
+- "first state-dependent-noise theory of SGD";
+- "SGD is not Brownian" as a project novelty;
+- "higher cumulants are a new SGD mechanism";
+- "projected-noise EoS theory is wrong";
+- "universal spectral theory of SGD".
+
+## Current novelty assessment
+
+The exact scalar counterexample plus controlled M9 evidence is a credible focused contribution. The broader higher-order covariance-jet hierarchy is mathematically interesting but heavily adjacent to established stochastic-numerics machinery; priority and publication novelty remain unresolved.

@@ -1,25 +1,19 @@
 # Experiments
 
-The repository organizes experiments by scientific role.
+This directory contains compact public experiment records. Canonical large artifacts remain on the project Drive.
 
-## Validation line
+## Available
 
-- Stage 3I-R: exact local mechanism validation
-- Stage 3J: residual falsification test
-- Stage 3K: held-out zero-fit prediction
+- `M1/`, `M2/` — early finite-horizon stochastic analyses.
+- `M7/` — neural/temporal-ordering branch retained for historical and falsification context.
+- `T1/` — temporal-ablation branch.
+- `M9/` — controlled EoS comparison for the state-dependent noise-geometry predictor.
 
-## Main stochastic geometry line
+## Evidence labels
 
-- M1: finite-horizon covariance under independent minibatching
-- M2: temporal covariance effects under random reshuffling
-- M3-M6: robustness and mechanism tests
-- M7: temporal-ordering causal ablation
+- historical / exploratory;
+- controlled numerical;
+- falsification / negative result;
+- confirmatory within a stated model family.
 
-## Theory line
-
-- T1: temporal covariance theory validation
-- T2: future theory and validation stage
-
-Each experiment should contain motivation, hypothesis, controls, configuration, code, metrics and interpretation.
-
-Archived experiment sources should remain unchanged for provenance.
+M9 is currently the strongest controlled numerical result in this repository. It is confirmatory for the tested 1D stochastic family, not a general neural-SGD result.

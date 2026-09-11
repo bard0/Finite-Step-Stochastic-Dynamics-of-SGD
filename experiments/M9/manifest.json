@@ -1,0 +1,11 @@
+{
+  "files": [
+    {"path":"README.md","sha256":"0b1ff95d3031acbbfb99315d78b87109d71895cb03ab5672281199f45f9ba661","size_bytes":4521},
+    {"path":"checkpoint.pt","sha256":"eba01d56c137483ef4a2b6846f71d43322150e9a4c14f9884687afea5ecdcc20","size_bytes":296593},
+    {"path":"config.json","sha256":"699c42a7bfd0c41e005d4881e5657688d13ce0038b29b382ab8fb1abbf583212","size_bytes":2379},
+    {"path":"logs.txt","sha256":"c3d27ba23c6fc46ebaa90479f547cdc05e052fbe0cbccfe10061af2110ceaea6","size_bytes":40016},
+    {"path":"predictor_metrics.csv","sha256":"dfe0133113807bfcc3496d5482c3ee6cb675af728e372b41d80c4c2dce23a4e4","size_bytes":2876},
+    {"path":"results.csv","sha256":"815ed36abac1102ded4c7a64b794602075b3149e661f5cd1ad48f7f6ce6577a4","size_bytes":136386}
+  ],
+  "note": "Canonical Drive manifest also records binary figure files and the full verified archive."
+}
