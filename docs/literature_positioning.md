@@ -2,34 +2,34 @@
 
 ## Scope
 
-The repository studies temporal stochastic geometry of finite-step SGD. The contribution is not the existence of stochastic effects in SGD, but whether temporal organization of gradient noise provides additional predictive information for finite-horizon covariance dynamics beyond matched marginal statistics.
+The repository studies finite-step stochastic dynamics of SGD as a discrete stochastic dynamical system.
+
+The central question is not whether stochasticity influences SGD, which is established, but whether finite-step dynamics contain predictive and mechanistic information beyond classical descriptors such as local curvature and marginal gradient-noise statistics.
 
 ## Relation to prior directions
 
 ### Curvature and gradient-noise analyses
 
-Existing work studies projected gradient noise, Hessian interactions, and local stochastic dynamics. This project extends the question toward temporal covariance structure.
+Existing work studies projected gradient noise, Hessian interactions, sharpness, and local stochastic dynamics. This project investigates whether these descriptors provide a sufficient description of finite-step stochastic evolution.
 
-### Finite-step SGD dynamics
+### Diffusion and stochastic modified equation approaches
 
-Discrete SGD corrections beyond continuous diffusion approximations are an established research direction. The focus here is empirical zero-fit prediction of finite-horizon stochastic quantities.
+Continuous approximations provide useful asymptotic descriptions. The current direction focuses on identifying regimes where discrete finite-step effects cannot be reduced to diffusion-level statistics.
 
-### Random reshuffling
+### Random reshuffling and temporal dependence
 
-Without-replacement sampling and temporal dependence are established topics. The repository does not claim discovery of random reshuffling effects; it tests whether their temporal structure improves covariance prediction.
+Temporal dependence is an established phenomenon. The project tests whether temporal organization carries additional predictive information after matching marginal statistics.
 
 ## Positioning against recent SGD work
 
-The project should be compared explicitly with recent finite-step and stochastic-dynamics analyses, including Liao et al. (2026) and Ignashin et al. (2026), while keeping claims restricted to experimentally supported regimes.
+The project should be compared explicitly with recent analyses of SGD stochastic dynamics, including Liao et al. (2026) and Ignashin et al. (2026), while restricting claims to experimentally and theoretically supported regimes.
 
 ## Core distinction
 
-The central object is:
+The central object is the finite-step stochastic operator:
 
-`K_st = Cov(xi_s, xi_t)`
+`P_eta f(theta) = E[f(theta - eta g_B(theta))]`
 
-and its contribution to:
+rather than only scalar noise magnitude or diffusion coefficients.
 
-`C_H = eta^2 sum P_s,H K_st P_t,H^T`
-
-rather than scalar noise magnitude alone.
+A key open problem is whether commonly used descriptors form a sufficient statistic for this operator.
