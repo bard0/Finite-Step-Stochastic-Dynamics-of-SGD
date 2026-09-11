@@ -6,33 +6,47 @@ The project studies finite-step stochastic gradient descent (SGD) as a discrete 
 
 ## Current central hypothesis
 
-Classical stochastic descriptors and edge-of-stability descriptors may be insufficient to determine finite-step SGD spectral and covariance dynamics.
+The strongest surviving hypothesis is not that SGD has universal memory or that a single covariance closure describes SGD. The current question is whether finite-step SGD behavior requires richer predictive observables than classical marginal descriptors.
 
-The working question is:
+Working hypothesis:
 
-> Which stochastic information is required to predict finite-horizon SGD dynamics beyond instantaneous gradient-noise statistics?
+> Early finite-step stochastic observables can contain predictive information about future SGD dynamics beyond Gradient Noise Scale, marginal covariance, and Hessian/sharpness diagnostics.
 
 ## Current theoretical line
 
-The finite-step SGD transition operator is considered directly:
+The exact finite-step transition operator remains the mathematical object:
 
 P_eta f(theta) = E[f(theta - eta g_B(theta))]
 
-The project investigates when different stochastic processes with matched low-order descriptors generate different finite-step operators.
+However, broad operator/spectral claims are not the main contribution. The current goal is to identify minimal sufficient observables or rigorous approximation-validity criteria.
 
-## Relation to recent work
+## Major corrections after audits
 
-The project is positioned relative to:
+- Temporal covariance K_st is no longer treated as a universal missing descriptor.
+- Simple second-order covariance closure was not sufficient in neural SGD validation.
+- Random reshuffling temporal effects remain relevant but have strong prior art and are not the main novelty target.
+- Theoretical validity certificates are retained as a possible contribution, but require sharpness analysis against existing high-Lp and stochastic approximation results.
 
-- analyses of stochastic sharpness and edge-of-stability behavior;
-- discrete stochastic dynamics of SGD;
-- stochastic modified equations;
-- Langevin approximations.
+## Current branches
 
-Recent work by Liao et al. and Ignashin et al. motivates separating observable training descriptors from the full discrete stochastic dynamics.
+### Predictive SGD dynamics
+
+Primary empirical direction:
+- compare GNS;
+- Hessian/sharpness diagnostics;
+- marginal covariance;
+- temporal/state-dependent stochastic observables;
+- approximation error prediction.
+
+### Finite-step theory
+
+Primary theoretical direction:
+- exact discrete operator expansion;
+- finite-horizon approximation validity;
+- separation of additive covariance, multiplicative Hessian noise, and nonlinear remainder terms.
 
 ## Evidence status
 
-- Confirmed: controlled experiments validating specific finite-step stochastic effects.
-- Exploratory: descriptor insufficiency hypotheses requiring further validation.
-- Open: rigorous characterization of minimal sufficient stochastic descriptors.
+- Confirmed: controlled finite-step stochastic effects and validated local mechanisms.
+- Exploratory: predictive observable discovery and descriptor insufficiency.
+- Open: minimal sufficient stochastic description of finite-step SGD.
