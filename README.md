@@ -1,42 +1,55 @@
 # Finite-Step Stochastic Dynamics of SGD
 
-Research repository studying the temporal stochastic geometry of finite-step stochastic gradient descent (SGD).
+Research repository studying finite-step stochastic gradient descent (SGD) as a discrete stochastic dynamical system.
 
-**Version:** 1.0.0 (research release, 2026-09-09)
+**Version:** 1.1.0 (research state update, 2026-09)
 
 ## Overview
 
-This repository investigates whether the temporal organization of SGD stochasticity contains predictive information about finite-step parameter dynamics beyond marginal gradient-noise statistics.
+The project investigates which stochastic information determines finite-horizon SGD dynamics beyond classical instantaneous gradient-noise descriptors.
 
-## Core question
+## Core questions
 
-Can temporal structure of SGD gradient noise predict finite-horizon stochastic covariance geometry and spectral effects beyond models based only on instantaneous noise statistics?
+1. Can temporal organization of SGD stochasticity predict finite-step covariance and spectral behavior beyond matched marginal statistics?
+
+2. Are common edge-of-stability descriptors sufficient to characterize finite-step SGD dynamics?
+
+3. Where do discrete SGD dynamics differ from continuous stochastic approximations?
 
 ## Research progression
 
-- **Stage 3I-R:** exact validation of the local Hessian-covariance mechanism.
-- **Stage 3J:** residual analysis beyond the validated second-order contribution.
-- **Stage 3K:** held-out zero-fit finite-step prediction.
-- **M1:** finite-horizon covariance prediction under i.i.d. minibatching.
-- **M2:** temporal covariance effects under random reshuffling.
-- **M7/T1:** causal temporal-ordering ablations and neural-SGD transfer.
+- Controlled validation of local stochastic covariance mechanisms.
+- Finite-horizon covariance prediction under stochastic minibatching.
+- Temporal ordering and causal ablation experiments.
+- Neural-SGD transfer studies.
+- Finite-step operator and descriptor insufficiency theory.
+
+## Theoretical viewpoint
+
+The project studies the exact finite-step transition operator:
+
+\[
+P_\eta f(\theta)=E[f(\theta-\eta g_B(\theta))]
+\]
+
+rather than assuming that SGD is fully described by a continuous diffusion approximation.
 
 ## Reproducibility
 
 The repository contains:
 
 - experiment source code;
-- frozen configurations;
+- configurations;
 - provenance records;
 - validated, exploratory, and negative-result archives;
-- automated public-release quality checks.
+- public release quality checks.
 
-Large raw computational artifacts are intentionally separated from the Git repository.
+Large computational artifacts remain separated from source control.
 
 ## Scientific principle
 
-The project follows a falsification-driven workflow. Negative and inconclusive experiments are preserved, and scientific claims are restricted to regimes supported by validation evidence.
+The workflow is falsification-driven. Negative and inconclusive results are preserved, and claims are limited to regimes supported by evidence.
 
 ## Citation
 
-If you use this repository, please cite the release version specified in `CITATION.cff`.
+If you use this repository, cite the release specified in `CITATION.cff`.
