@@ -1,14 +1,12 @@
 # Current Research State
 
-Last synchronized with the project Drive: **2026-09-12**.
+Last synchronized with the project archive: **2026-09-15**.
 
 ## 1. Current question
 
-The project asks which stochastic information is required to predict finite-step SGD behavior near stability boundaries.
+Which stochastic information is required to predict finite-step SGD behavior near stability boundaries, and which candidate descriptors survive held-out neural transfer tests?
 
-The earlier temporal-covariance hypothesis was materially narrowed. For standard iid/with-replacement minibatch SGD, centered innovations form a martingale-difference sequence under the usual conditional-unbiasedness assumptions, so generic off-diagonal temporal covariance is not the missing universal mechanism. Random reshuffling remains a separate sampling regime with genuine temporal structure and substantial prior art.
-
-The primary active SGD mechanism is therefore **state-dependent / multiplicative stochastic geometry** and its finite-step consequences.
+The earlier universal temporal-covariance hypothesis remains rejected for ordinary iid/with-replacement minibatching under standard conditional-unbiasedness assumptions. The main line therefore focuses on state-dependent stochastic geometry, finite-step dynamics, and falsifiable higher-order descriptors.
 
 ## 2. Confirmed mathematical core
 
@@ -20,75 +18,77 @@ For the solvable scalar model,
 
 \[
 q=(1-\eta\lambda)^2+\eta^2 G_\Sigma,
-\]
-
-and stability requires `q < 1`, giving
-
-\[
+\qquad
 \eta_c=\frac{2\lambda}{\lambda^2+G_\Sigma}.
 \]
 
 The additive control has `G_Sigma=0` and recovers `2/lambda`.
 
-This is an **existence / insufficiency** statement. It is not a claim that multiplicative noise, state-dependent covariance, or mean-square stability theory is new.
+This is an existence / insufficiency statement, not a claim that multiplicative noise or mean-square stability theory is new.
 
 ## 3. M9 controlled evidence
 
-M9 tests frozen predictors in a controlled 1D stochastic family. No predictor is fit to empirical thresholds or sharpness targets.
+M9 tests frozen predictors in a controlled 1D stochastic family.
 
-System-level `eta_c`:
+- system-level `eta_c`: noise-geometry model R2 `0.7791`, Spearman `0.8714`;
+- matched `Delta eta_c`: R2 `0.8485`, Spearman `0.9543`;
+- absolute sharpness gap: projected-noise baseline R2 `0.9519`, noise-geometry model R2 `0.9943`;
+- matched `Delta S`: noise-geometry model R2 `0.9835`, Spearman `0.9777`.
 
-- Model 0/1: MAE `0.6741`, RMSE `0.9053`, R2 `-1.2446`.
-- Model 2 (`G_Sigma`): MAE `0.2075`, RMSE `0.2840`, R2 `0.7791`, Spearman `0.8714`.
+The evidence supports an incremental role for state-dependent noise geometry, especially in matched-system differences and stability prediction. It does not show that leading projected-noise EoS theory fails for absolute sharpness.
 
-Matched A-B threshold difference:
+## 4. G8.10 mixed-fourth neural branch
 
-- Model 0/1: predicted zero; R2 `-2.2405`.
-- Model 2: MAE `0.1476`, RMSE `0.2217`, R2 `0.8485`, Spearman `0.9543`.
+The neural branch tests
 
-System-level sharpness gap:
+\[
+\chi_{mix}=D^4L[u,u,v,v],
+\]
 
-- Model 1 (projected zero-order noise): R2 `0.9519`.
-- Model 2: R2 `0.9943`.
+where `u` is the top Hessian eigenvector and `v` is a frozen transverse direction derived from the sharpness gradient.
 
-Matched A-B sharpness difference:
+Estimator feasibility, descriptor replication, and finite-horizon target acquisition were established before the final predictive test.
 
-- Model 0/1: predicted zero; R2 `-0.1682`.
-- Model 2: R2 `0.9835`, Spearman `0.9777`.
+### B4 primary held-out test
 
-Therefore the evidence does **not** support a claim that projected-noise EoS theory fails for the absolute sharpness gap. It supports an incremental role for noise geometry, especially in matched-system differences and stability prediction.
+The frozen primary comparison was `N3` (strong lower-order + stochastic + finite-step + rotation baseline) versus `N4=N3+chi_mix`, using fresh seed groups and grouped out-of-fold ridge regression.
 
-## 4. Higher-order covariance theory
+Across 30 usable checkpoints from 16 seed groups:
 
-The finite-horizon theory branch contains internal fixed-horizon expansions beyond the additive covariance term.
+- MAE `2.0926 -> 1.9942`;
+- MAE gain `0.04699`, 95% seed-group bootstrap CI `[-0.06188, 0.15109]`;
+- `Delta R2 = 0.00325`, CI `[-0.05698, 0.04135]`;
+- residual Spearman `0.3277`, CI `[-0.0704, 0.6311]`;
+- sign agreement `0.6333`;
+- paired permutation `p = 0.0428`.
 
-Current compressed picture:
+The preregistered primary verdict is **`FAIL_NO_PRIMARY_NEURAL_INCREMENTAL_VALUE`** because the effect did not meet the frozen magnitude, uncertainty, correlation, sign, and cross-regime robustness gates.
 
-- order 4: covariance-field curvature `D^2 Sigma` and gradient-noise third cumulant `Gamma` enter the corrected covariance descriptor;
-- order 5: additional sectors involve `D Sigma`, `D^3 Sigma`, and the fourth cumulant, with distinct batch-size scalings.
+The eta-stratified MAE gain was `+14.76%` at `eta=0.018` but `-2.66%` at `eta=0.020`. This is retained only as exploratory evidence for possible regime dependence.
 
-Exact matched-pair constructions show that some of these descriptors are irredundant within the restricted local-jet closure. Generic higher-order weak expansions and cumulant mechanisms have substantial prior art, so publication-level novelty for this hierarchy is not established.
+### Secondary Liao-mechanistic subset
 
-## 5. Important negative results
+The secondary paper-faithful mechanism test is **inconclusive**. Only 3 independent seed groups survived the exact applicability/moving-reference pipeline; most attrition came from local alpha/beta prerequisite failure after exact KKT projection. This does not constitute evidence against the Liao mechanism itself.
 
-- Additive zero-mean noise alone does not generically shift the local mean-Jacobian spectrum.
-- Pure affine non-Gaussian noise can change the transition operator without changing its eigenvalues; operator separation alone is insufficient.
-- A universal temporal-covariance closure for iid SGD is not viable under standard filtration assumptions.
-- The earlier finite-horizon covariance-validity certificate is mathematically valid but can be very conservative because it loses stochastic cancellations.
-- Higher cumulants alone are not a defensible novelty claim.
+## 5. Higher-order covariance theory
 
-## 6. New adjacent branch: finite-sample stability risk
+Internal fixed-horizon expansions identify additional local stochastic information beyond additive covariance, including covariance-field derivatives and higher cumulants. These derivations remain mathematically useful, but broad novelty is not claimed because the ingredients overlap stochastic modified equations, weak expansions, B-series, cumulant theory, and multiplicative-noise literature.
 
-A synthesis branch now asks a statistical question: even if a lifted stability operator is consistently estimable, can the boundary functional `rho(M)=1` be inferred reliably near local alternatives?
+The neural B4 result is an important constraint: measurability of a higher-order descriptor does not imply regime-robust predictive value.
 
-Working hypothesis: stochastic stability decisions can become statistically non-regular near the boundary, motivating calibrated `stable / unstable / uncertain` risk statements rather than only point estimates.
+## 6. Important negative / narrowing results
 
-This is an active research direction, not a confirmed theorem.
+- additive zero-mean noise alone does not generically shift the local mean-Jacobian spectrum;
+- pure affine non-Gaussian noise can change the transition operator without changing its eigenvalues;
+- a universal temporal-covariance closure for iid SGD is not viable under standard filtration assumptions;
+- higher cumulants alone are not a defensible novelty claim;
+- the preregistered regime-robust neural incremental-value claim for `chi_mix` failed in G8.10-B4;
+- the secondary Liao-mechanistic B4 test remains unresolved because of applicability attrition, not because of a confirmed mechanism failure.
 
 ## 7. Current priorities
 
-1. Replicate the `G_Sigma` effect in a genuine finite-sum / minibatch control beyond the continuous-noise 1D family.
-2. Test multidimensional noncommuting noise geometry with exact mean-square/Lyapunov baselines.
-3. Audit the higher-order covariance-jet results against stochastic-numerics literature before any novelty escalation.
-4. Develop the finite-sample stability-boundary branch with an explicit falsification test under local `m^{-1/2}` alternatives.
-5. Preserve strict separation between theorem, controlled numerical evidence, exploratory hypotheses, and negative results.
+1. Finish the cheap post-hoc diagnostic of the observed eta heterogeneity without changing the B4 verdict.
+2. Only if a regime-dependent signal survives influence, residualization, collinearity, and negative-control audits, preregister a small independent confirmatory test.
+3. Continue genuine finite-sum/minibatch and multidimensional tests of the stronger M9 noise-geometry result.
+4. Keep exact comparison with Liao et al. 2026 and Ignashin et al. 2026 for every new theorem or neural claim.
+5. Preserve strict separation between theorem, controlled numerical evidence, exploratory hypotheses, inconclusive tests, and falsified claims.

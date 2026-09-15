@@ -1,18 +1,19 @@
 {
-  "schema_version": 3,
-  "scope": "canonical public repository layout",
-  "research_state_date": "2026-09-12",
+  "schema_version": 4,
+  "scope": "canonical public repository layout for the main SGD research line",
+  "research_state_date": "2026-09-15",
   "source_of_truth": "project Google Drive",
-  "note": "Large raw trajectories, checkpoints, tensor archives, full logs, binary figures and generated caches are intentionally excluded from normal Git history.",
+  "note": "Large raw trajectories, checkpoints, tensor archives, full logs, binary figures and generated caches are intentionally excluded from normal Git history. Separate side-branch research is not part of this manifest.",
   "promoted_results": [
     "scalar finite-sum descriptor-insufficiency counterexample",
     "exact mean-square threshold eta_c = 2 lambda / (lambda^2 + G_Sigma)",
-    "M9 controlled predictor comparison"
+    "M9 controlled predictor comparison",
+    "G8.10-B4 preregistered neural mixed-fourth incremental-value falsification"
   ],
   "active_theory": [
     "noise-geometry stability",
     "higher-order finite-horizon covariance jets",
-    "finite-sample stochastic stability boundary"
+    "neural higher-order descriptor sufficiency under strict held-out testing"
   ],
   "canonical_paths": [
     "README.md",
@@ -34,7 +35,6 @@
     "docs/roadmap.md",
     "docs/next_actions.md",
     "docs/theory_audit_status.md",
-    "docs/statistical_stability_boundary.md",
     "docs/theory/descriptor_sufficiency.md",
     "docs/theory/finite_step_operator_view.md",
     "docs/theory/noise_geometry_stability.md",
@@ -65,6 +65,10 @@
     "experiments/M9/manifest.json",
     "experiments/M9/PROVENANCE.md",
     "experiments/T1/README.md",
+    "experiments/G8_10/README.md",
+    "experiments/G8_10/b4_primary_metrics.csv",
+    "experiments/G8_10/b4_eta_stratified.csv",
+    "experiments/G8_10/b4_verdict.json",
     "paper/outline.md",
     "paper/roadmap.md",
     "results/confirmed/README.md",

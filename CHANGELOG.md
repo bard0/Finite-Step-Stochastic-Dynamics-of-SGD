@@ -1,13 +1,23 @@
 # Changelog
 
+## 1.4.0 — 2026-09-15 neural-transfer falsification sync
+
+- Synchronized the main SGD research line through G8.10-B4.
+- Added the compact public record of the neural mixed-fourth (`chi_mix`) transfer test.
+- Recorded the preregistered B4 primary verdict: `FAIL_NO_PRIMARY_NEURAL_INCREMENTAL_VALUE`.
+- Recorded the heterogeneous eta-stratified result without promoting it beyond exploratory status.
+- Recorded the secondary Liao-mechanistic verdict as inconclusive because of applicability/moving-reference attrition.
+- Updated claim ledger, experiment map/status, roadmap, and current research state.
+- Removed the separate finite-sample stability-boundary side branch from the main repository state to keep research lines separated.
+- Re-audited public text to avoid internal workflow/tool references.
+
 ## 1.3.0 — 2026-09-12 research-state sync
 
-- Synchronized the repository with the latest project Drive state.
+- Synchronized the repository with the project archive.
 - Promoted the exact scalar noise-geometry / mean-square stability result.
 - Added M9 controlled comparison artifacts and predictor metrics.
 - Updated claim discipline: projected-noise EoS remains a strong absolute-sharpness baseline; `G_Sigma` is supported mainly by matched-system separation and threshold prediction.
 - Added higher-order covariance-jet theory summary with explicit prior-art limitations.
-- Added the active finite-sample stochastic-stability-boundary branch.
 - Updated paper outline and roadmap.
 - Re-audited repository text for prohibited internal-tool references.
 

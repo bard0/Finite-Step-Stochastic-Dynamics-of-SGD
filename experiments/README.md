@@ -1,19 +1,22 @@
 # Experiments
 
-This directory contains compact public experiment records. Canonical large artifacts remain on the project Drive.
+This directory contains compact public experiment records. Canonical large artifacts remain in the project archive.
 
 ## Available
 
 - `M1/`, `M2/` — early finite-horizon stochastic analyses.
-- `M7/` — neural/temporal-ordering branch retained for historical and falsification context.
+- `M7/` — temporal-ordering branch retained for historical and falsification context.
 - `T1/` — temporal-ablation branch.
 - `M9/` — controlled EoS comparison for the state-dependent noise-geometry predictor.
+- `G8_10/` — neural mixed-fourth estimator/transfer line, including the preregistered B4 negative result.
 
 ## Evidence labels
 
-- historical / exploratory;
+- analytical / exact control;
 - controlled numerical;
-- falsification / negative result;
-- confirmatory within a stated model family.
+- confirmatory within a stated model family;
+- exploratory;
+- inconclusive;
+- falsification / negative result.
 
-M9 is currently the strongest controlled numerical result in this repository. It is confirmatory for the tested 1D stochastic family, not a general neural-SGD result.
+M9 remains the strongest positive controlled numerical result in this repository. G8.10 is important for a different reason: it shows that a measurable higher-order descriptor did not achieve the preregistered regime-robust held-out predictive gain in the tested neural setting.

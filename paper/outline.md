@@ -8,15 +8,11 @@ Leading local EoS descriptions use curvature and projected gradient-noise magnit
 
 Construct matched finite-sum SGD systems with equal population Hessian and equal zero-order gradient-noise covariance but different state-dependent noise geometry.
 
-Derive the exact scalar mean-square coefficient
+Derive
 
 \[
-q=(1-\eta\lambda)^2+\eta^2G_\Sigma
-\]
-
-and boundary
-
-\[
+q=(1-\eta\lambda)^2+\eta^2G_\Sigma,
+\qquad
 \eta_c=2\lambda/(\lambda^2+G_\Sigma).
 \]
 
@@ -34,17 +30,29 @@ Emphasize that the projected-noise baseline remains strong for the absolute shar
 
 Present the exact quadratic-Lyapunov drift and the noise-geometry LMI. Clearly distinguish theorem from conjectured neural relevance.
 
-## 6. Relation to prior work
+## 6. Neural transfer stress test
+
+Report G8.10 as a falsification-oriented extension, not as support for the main theorem.
+
+- `chi_mix = D^4L[u,u,v,v]` is measurable in the tested smooth neural setup.
+- The preregistered B4 pooled held-out `N3 -> N4` test fails the strong regime-robust incremental-value claim.
+- Eta-specific heterogeneity is exploratory only.
+- The paper-faithful Liao-mechanistic subset is inconclusive because of applicability/moving-reference attrition.
+
+This section is useful because it limits overgeneralization from the controlled scalar theory to neural SGD.
+
+## 7. Relation to prior work
 
 Position relative to stochastic EoS, discrete finite-step SGD, stochastic modified equations, multiplicative-noise stability, and weak stochastic expansions.
 
-## 7. Limitations
+## 8. Limitations
 
-- controlled low-dimensional family;
+- strongest positive evidence is still controlled/low-dimensional;
 - no claim that `G_Sigma` is universally sufficient;
-- genuine minibatch and neural validation still required;
-- higher-order covariance jets have substantial prior-art overlap.
+- neural mixed-fourth transfer did not pass the preregistered regime-robust test;
+- higher-order covariance jets have substantial prior-art overlap;
+- secondary Liao attribution is unresolved in the tested neural cohort.
 
-## 8. Falsification experiments
+## 9. Next falsification experiments
 
-Finite-sum minibatch replication, multidimensional noncommuting control, and held-out neural prediction against GNS/Hessian/projected-noise baselines.
+Genuine finite-sum minibatch replication, multidimensional noncommuting controls, and only narrowly preregistered neural follow-up hypotheses that survive cheap diagnostics.

@@ -1,0 +1,26 @@
+{
+  "run": "G8_10_B4_PRIMARY_NEURAL_INCREMENTAL_VALUE_20260915T153302Z",
+  "primary_verdict": "FAIL_NO_PRIMARY_NEURAL_INCREMENTAL_VALUE",
+  "secondary_liao_verdict": "INCONCLUSIVE_LIAO_MOVING_REFERENCE_ATTRITION",
+  "n_checkpoints": 30,
+  "n_seed_groups": 16,
+  "primary": {
+    "gain_mae": 0.04699179501492301,
+    "gain_mae_ci95": [-0.061881351359404667, 0.15109396384948287],
+    "delta_r2": 0.0032454211895864837,
+    "delta_r2_ci95": [-0.056983840059641584, 0.041352888264758747],
+    "residual_spearman": 0.32769744160177977,
+    "residual_spearman_ci95": [-0.070419704019926269, 0.6311392216091952],
+    "sign_agreement": 0.6333333333333333,
+    "permutation_p": 0.04279144171165767
+  },
+  "eta_stratified": {
+    "0.018": {"n": 14, "gain_mae": 0.14762005749032592},
+    "0.020": {"n": 16, "gain_mae": -0.026639897310814842}
+  },
+  "secondary": {
+    "surviving_seed_groups": 3,
+    "counts_by_eta": {"0.018": 2, "0.020": 2},
+    "interpretation": "insufficient paper-applicable moving-reference sample; no mechanism failure inferred"
+  }
+}
