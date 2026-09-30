@@ -2,13 +2,13 @@
 
 **Project:** Finite-Step Stochastic Dynamics of SGD  
 **Freeze date:** 2026-09-30  
-**Status:** completed exploratory/theoretical portfolio phase; publication-oriented extensions are separated into a possible v2.
+**Status:** v1.0 complete. Publication-oriented extensions are treated as a separate possible v2.
 
 ## 1. Research question
 
 The project began from a simple question: can stochastic gradient descent be understood through the spectrum of an effective stochastic evolution operator, and can this viewpoint predict how minibatch noise changes stability and relaxation?
 
-The exact finite-step object used in the mature formulation is
+The finite-step formulation uses
 
 \[
 (P_\eta f)(\theta)=\mathbb E\,f(\theta-\eta g_B(\theta)).
@@ -18,7 +18,7 @@ The project gradually moved away from treating SGD as “gradient descent plus a
 
 > **Which stochastic information is sufficient to predict finite-step SGD dynamics?**
 
-This shift was driven by both positive and negative results.
+The question changed because several early hypotheses failed while a smaller set of effects survived controlled tests.
 
 ## 2. Research trajectory
 
@@ -26,9 +26,9 @@ This shift was driven by both positive and negative results.
 
 The initial branch treated stochasticity as a perturbation of local deterministic dynamics and studied shifts of spectral modes. Controlled Duffing experiments were used as a physically interpretable testbed because slow modes, metastability, relaxation times, and Kramers-type behavior can be checked independently.
 
-The strongest historical controlled Duffing test produced near-perfect agreement between predicted and measured spectral shifts in the controlled regime: mean absolute error about \(1.5\times10^{-7}\), median relative error about \(2.5\times10^{-3}\), and Spearman correlation about \(0.999\). This established that the perturbative spectral machinery can be numerically accurate when its assumptions are deliberately enforced.
+In the controlled Duffing test, predicted and measured spectral shifts agreed very closely: mean absolute error about \(1.5\times10^{-7}\), median relative error about \(2.5\times10^{-3}\), and Spearman correlation about \(0.999\). This showed that the perturbative calculation can be numerically accurate when its assumptions are satisfied.
 
-A complementary additive-noise unit test showed essentially no physical mean spectral shift. This became an important early falsification: **noise amplitude by itself is not the mechanism.**
+A complementary additive-noise unit test showed essentially no physical mean spectral shift. This ruled out a simple explanation: **noise amplitude by itself is not the mechanism.**
 
 ### Stage B — state-dependent stochastic geometry
 
@@ -69,7 +69,7 @@ This did not survive the filtration audit. For conditionally unbiased independen
 
 Further repaired neural experiments also showed that a simple linear temporal-covariance closure did not outperform a marginal covariance baseline in the tested regime.
 
-This branch was therefore **downgraded rather than hidden**. Its main contribution to the project was methodological: it forced stricter causal designs and a clearer distinction between temporal ordering effects and a universal covariance-memory theory.
+I dropped this as a general mechanism. The useful outcome was methodological: later experiments used stricter causal designs and separated temporal-ordering effects from any claim of a universal covariance-memory theory.
 
 ### Stage E — higher-order neural transfer and falsification
 
@@ -95,11 +95,11 @@ The frozen regime-robust success gates were not jointly satisfied. The confirmat
 
 **FAIL_NO_PRIMARY_NEURAL_INCREMENTAL_VALUE.**
 
-The apparent gain was heterogeneous across learning-rate regimes and is retained only as exploratory evidence. This is a central part of the final story: **measurability of a sophisticated descriptor does not imply robust predictive value.**
+The apparent gain was heterogeneous across learning-rate regimes and is retained only as exploratory evidence. The practical lesson was simple: **being able to measure a complicated descriptor does not mean it will improve prediction.**
 
-## 3. Mature theoretical viewpoint
+## 3. Final theoretical viewpoint
 
-The project ultimately converged on a finite-step **spectral closure / information sufficiency** viewpoint.
+By the end, the project was best described as a finite-step **spectral closure / information sufficiency** problem.
 
 The question is no longer whether one can write another term in a stochastic Taylor expansion. Such higher-order terms overlap strongly with stochastic modified equations, weak expansions, cumulant expansions, B-series, and multiplicative-noise theory.
 
@@ -107,7 +107,7 @@ The sharper question is:
 
 > Given a target finite-step observable or spectrum, what compressed stochastic information is sufficient to determine it to a stated order and horizon?
 
-Late proof work produced several useful local matched-information constructions and, equally importantly, several self-falsifications. In particular, compact quotients derived for frozen stochastic laws did **not** survive unrestricted moving stochastic laws without additional time-ordered information. This prevented the project from overstating a universal low-dimensional closure.
+The late proof work produced several local matched-information constructions, but also exposed limits of the compact closures I was trying to derive. In particular, compact quotients derived for frozen stochastic laws did **not** survive unrestricted moving stochastic laws without additional time-ordered information. So I did not promote the frozen-law calculation to a universal low-dimensional closure.
 
 These advanced local constructions are archived as a possible v2 research direction, not promoted as a final v1 headline theorem.
 
@@ -152,26 +152,14 @@ The final framing sits between two complementary lines.
 - **Liao et al. (2026):** leading EoS/sharpness dynamics compressed into curvature, nonlinear restoring geometry, and projected noise variance.
 - **Ignashin et al. (2026):** finite-step SGD retains information that Brownian/Langevin closures can lose.
 
-The project’s v1 contribution is best described as a **descriptor-sufficiency investigation**: controlled examples, analytical counterexamples, predictive benchmarks, and falsification tests for deciding what information is or is not enough for finite-step SGD observables.
+The v1 contribution is a **descriptor-sufficiency study**: controlled examples, an analytical counterexample, predictive benchmarks, and negative tests that show where simpler descriptions stop being adequate.
 
 ## 7. Why stop here?
 
-The portfolio objective has been achieved.
+At this point the main claims are clear, the important negative results are documented, and the remaining questions require genuinely new theory or new data.
 
-The project demonstrates the full research loop:
-
-1. formulation of a mathematical hypothesis;
-2. controlled solvable models;
-3. spectral and stochastic analysis;
-4. numerical validation;
-5. causal/held-out experimental design;
-6. literature comparison;
-7. explicit falsification of attractive hypotheses;
-8. narrowing of claims when stronger statements failed;
-9. reproducibility and claim-status tracking.
-
-Further work would no longer be “finishing v1.” It would constitute a new publication-oriented project: proving a moving-reference/long-horizon spectral-closure theorem, establishing external priority, or designing a new prospective neural validation.
+A moving-reference or long-horizon closure theorem, a theorem-level priority check, or another prospective neural experiment would be a separate project rather than cleanup needed to finish v1.
 
 ## 8. Final project statement
 
-**Finite-step SGD dynamics cannot, in general, be reduced to a single scalar noise amplitude or an unqualified low-order stochastic closure. Controlled models show that state-dependent stochastic geometry can change stability and matched-system dynamics, while neural transfer experiments show that increasingly high-order descriptors do not automatically deliver robust predictive value. The main scientific outcome is therefore not one universal formula, but a falsification-driven map of which stochastic descriptions succeed, fail, and remain insufficient for finite-step SGD.**
+**Finite-step SGD dynamics cannot, in general, be reduced to a single scalar noise amplitude or an unqualified low-order stochastic closure. Controlled models show that state-dependent stochastic geometry can change stability and matched-system dynamics, while the neural tests show that adding higher-order descriptors does not automatically improve prediction. The main outcome of v1 is a clearer boundary between stochastic descriptions that work in the tested settings and those that do not.**
