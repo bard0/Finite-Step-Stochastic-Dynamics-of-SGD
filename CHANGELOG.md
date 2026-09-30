@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.0 — 2026-09-30 PROJECT_FREEZE_v1
+
+- Froze the exploratory/theoretical portfolio phase as v1.0.
+- Added `FINAL_RESEARCH_SUMMARY.md` with the full research narrative from controlled spectral tests through finite-step descriptor sufficiency.
+- Added `PROJECT_FREEZE_v1.md` defining the exact v1/v2 boundary.
+- Rewrote the public README around the final scientific question rather than the latest branch.
+- Added `docs/portfolio_key_results.md` with three recommended portfolio visuals and captions.
+- Added `research_history/README.md` to preserve the hypothesis/falsification trajectory without exposing the full internal archaeology as the entry point.
+- Updated the current-state and claim ledgers to include the late-theory self-falsification boundary.
+- Retained the G8.10-B4 neural result as a confirmatory negative result.
+- No unresolved late proof branch was promoted to a general moving-PGD, long-horizon, or neural theorem.
+
 ## 1.4.0 — 2026-09-15 neural-transfer falsification sync
 
 - Synchronized the main SGD research line through G8.10-B4.
@@ -7,34 +19,23 @@
 - Recorded the preregistered B4 primary verdict: `FAIL_NO_PRIMARY_NEURAL_INCREMENTAL_VALUE`.
 - Recorded the heterogeneous eta-stratified result without promoting it beyond exploratory status.
 - Recorded the secondary Liao-mechanistic verdict as inconclusive because of applicability/moving-reference attrition.
-- Updated claim ledger, experiment map/status, roadmap, and current research state.
-- Removed the separate finite-sample stability-boundary side branch from the main repository state to keep research lines separated.
-- Re-audited public text to avoid internal workflow/tool references.
 
 ## 1.3.0 — 2026-09-12 research-state sync
 
-- Synchronized the repository with the project archive.
 - Promoted the exact scalar noise-geometry / mean-square stability result.
 - Added M9 controlled comparison artifacts and predictor metrics.
-- Updated claim discipline: projected-noise EoS remains a strong absolute-sharpness baseline; `G_Sigma` is supported mainly by matched-system separation and threshold prediction.
-- Added higher-order covariance-jet theory summary with explicit prior-art limitations.
-- Updated paper outline and roadmap.
-- Re-audited repository text for prohibited internal-tool references.
+- Updated claim discipline: projected-noise EoS remains a strong absolute-sharpness baseline; \(G_\Sigma\) is supported mainly by matched-system separation and threshold prediction.
 
 ## 1.2.0 — Finite-step operator theory update
 
 - Extended repository scope from temporal covariance analysis to finite-step stochastic dynamics of SGD.
 - Added documentation of the discrete SGD operator viewpoint.
 - Added EoS descriptor insufficiency as an open theoretical direction.
-- Updated roadmap toward causal and spectral validation of finite-step effects.
-- Removed internal workflow terminology from public-facing repository content.
 
 ## 1.1.0 — Repository structure update
 
 - Updated public documentation around finite-step stochastic dynamics.
-- Added experiment structure for M1, M2, M7 and T1.
-- Added claim tracking and reproducibility documentation.
-- Added artifact policy updates.
+- Added experiment structure and claim tracking.
 - Preserved negative and exploratory research stages.
 
 ## 1.0.0 — Public research release
