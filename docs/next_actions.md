@@ -1,25 +1,23 @@
-# Next Actions
+# Possible Follow-up Work
 
-## Cheap falsification gates first
-
-1. **G8.10-B4 heterogeneity audit.** On frozen B4 artifacts only, test seed influence, eta-by-`chi_mix` interaction, residualized `chi_mix`, collinearity with rotation, and the frozen random-descriptor control. Keep the original B4 verdict unchanged.
-2. **Finite-sum replication of M9.** Reproduce the `G_Sigma` threshold separation under genuine minibatch sampling with matched zero-order descriptors.
-3. **Coefficient audit.** Verify the exact `eta_c` scaling across `lambda`, batch size, and controlled noise-geometry strength.
-4. **Multidimensional control.** Test noncommuting Hessian/noise geometry against an exact lifted second-moment or Lyapunov/LMI baseline.
-
-## Conditional neural work
-
-5. If and only if the existing-data B4 diagnostic yields a stable, specific regime-dependent effect, freeze one small prospective hypothesis and test it on fresh seeds.
-6. Otherwise stop the `chi_mix` predictive branch and retain the negative result.
+v1.0 is complete. The items below are not unfinished v1 tasks; they are possible starting points for a separate v2.
 
 ## Theory
 
-7. Finish the literature/priority audit for the higher-order covariance-jet hierarchy before claiming novelty.
-8. Tie every new higher-order theorem to a falsifiable observable or matched-separation construction.
+1. Check whether the local coupling descriptors derived for frozen stochastic laws collapse to a finite jet for a fixed smooth finite-sum objective.
+2. Obtain a moving-reference / moving-PGD result with explicit remainder control.
+3. Extend the scalar mean-square stability construction to genuinely multidimensional noncommuting geometry.
+4. Finish theorem-level priority checks before making a publication novelty claim.
 
-## Stop rules
+## Experiments
 
-- Do not change the preregistered B4 primary verdict after seeing post-hoc diagnostics.
-- Do not select a new transform of `chi_mix` using future targets and then call it confirmatory.
-- Do not escalate to a large neural experiment from an eta-specific exploratory effect alone.
-- Do not claim a new higher-cumulant mechanism without a distinct observable consequence and literature separation.
+5. Replicate the M9 separation under genuine finite-sum minibatch sampling with matched low-order descriptors.
+6. Run a new neural test only if it is based on a hypothesis fixed in advance and evaluated on fresh seeds.
+7. Treat the observed eta dependence of chi_mix as exploratory unless it survives an independent prospective test.
+
+## Constraints carried forward
+
+- the G8.10-B4 primary verdict does not change;
+- post-hoc transforms of chi_mix are not confirmatory evidence;
+- a larger neural experiment is not justified by one favorable eta stratum alone;
+- higher-order stochastic terms need a distinct observable consequence and a literature separation argument.
