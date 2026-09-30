@@ -1,104 +1,134 @@
 # Finite-Step Stochastic Dynamics of SGD
 
-Research repository for finite-step stochastic gradient descent (SGD), with emphasis on stability, state-dependent gradient-noise geometry, higher-order local descriptors, and falsification-first neural transfer tests.
+A falsification-driven research project on **which stochastic information is actually needed to predict finite-step SGD stability and dynamics**.
 
-**Research state:** 2026-09-15
+**Project status:** **v1.0 frozen — 2026-09-30**  
+The exploratory/theoretical portfolio phase is complete. Publication-oriented extensions are separated into a possible v2.
 
-## Current scientific focus
+## Problem
 
-The project asks which stochastic descriptors are sufficient to predict finite-step SGD stability and edge-of-stability observables.
+SGD is often compressed into deterministic drift plus a small number of noise statistics. That is useful, but it raises a precise question:
 
-The exact one-step object is
+> **Which stochastic descriptors are sufficient for a finite-step SGD observable or stability boundary?**
+
+The mature project starts from the exact Markov/Koopman operator
 
 \[
-(P_\eta f)(\theta)=\mathbb E\,f(\theta-\eta g_B(\theta)).
+(P_\eta f)(\theta)=\mathbb E\,f(\theta-\eta g_B(\theta))
 \]
 
-For local mean-square stability, lifted second-moment dynamics remain central. For neural transfer, the current question is whether higher-order local geometry adds held-out predictive information beyond lower-order stochastic, curvature, finite-step, and eigenspace-rotation descriptors.
+and tests increasingly rich closures against analytical counterexamples, controlled benchmarks, and held-out neural experiments.
 
-## Strongest analytical result
+## Approach
 
-A controlled scalar finite-sum construction shows that two SGD systems can share the same population Hessian and the same zero-order gradient-noise covariance at the reference point while having different exact finite-step second-moment stability thresholds.
+The project combined:
 
-For the exactly solvable multiplicative-noise model,
+- local spectral perturbation theory;
+- solvable stochastic dynamical systems;
+- exact finite-step / second-moment analysis;
+- state-dependent gradient-noise geometry;
+- controlled matched-system benchmarks;
+- causal and grouped held-out neural tests;
+- explicit negative controls and preregistered stop rules;
+- literature comparison against EoS and finite-step SGD theory.
+
+The project deliberately preserved failed hypotheses.
+
+## Key results
+
+### 1. Controlled spectral validation
+
+Early controlled Duffing experiments showed that the perturbative spectral machinery can be extremely accurate when its assumptions are enforced: mean absolute error about \(1.5\times10^{-7}\), median relative error about \(2.5\times10^{-3}\), and Spearman correlation about \(0.999\).
+
+An additive-noise control simultaneously showed that **noise amplitude alone is not a generic spectral-shift mechanism**.
+
+### 2. Exact finite-step stability counterexample
+
+A scalar finite-sum construction matches lower-order reference descriptors while changing exact mean-square stability through state-dependent noise geometry:
 
 \[
-q=(1-\eta\lambda)^2+\eta^2 G_\Sigma,
+q=(1-\eta\lambda)^2+\eta^2G_\Sigma,
 \qquad
 \eta_c=\frac{2\lambda}{\lambda^2+G_\Sigma}.
 \]
 
-The contribution is an explicit descriptor-insufficiency statement and finite-step stability consequence, not the generic observation that state-dependent noise exists.
+This is a descriptor-insufficiency result, not a claim that multiplicative noise or mean-square stability theory are new.
 
-## M9 controlled comparison
+### 3. M9 controlled prediction
 
-`experiments/M9/` contains the compact public record of the controlled EoS comparison.
-
-| target | baseline | noise-geometry model |
+| target | simpler baseline | noise-geometry model |
 |---|---:|---:|
-| system-level `eta_c` R2 | -1.2446 | **0.7791** |
-| matched A-B `Delta eta_c` R2 | -2.2405 | **0.8485** |
-| system-level sharpness-gap R2 | 0.9519 | **0.9943** |
-| matched A-B `Delta S` R2 | -0.1682 | **0.9835** |
+| system-level \(\eta_c\), \(R^2\) | -1.2446 | **0.7791** |
+| matched A-B \(\Delta\eta_c\), \(R^2\) | -2.2405 | **0.8485** |
+| absolute sharpness gap, \(R^2\) | 0.9519 | **0.9943** |
+| matched A-B \(\Delta S\), \(R^2\) | -0.1682 | **0.9835** |
 
-The projected-noise baseline already explains most of the absolute sharpness gap. The stronger evidence for `G_Sigma` is in matched-system separation and stability-threshold prediction.
+The strongest evidence for the extra descriptor is in **matched-system separation and stability prediction**. The simpler projected-noise baseline already explains most absolute sharpness variation.
 
-## G8.10 neural mixed-fourth transfer test
+### 4. Neural falsification result
 
-The neural branch studies the mixed fourth directional derivative
+The mixed fourth directional derivative
 
 \[
-\chi_{mix}=D^4L[u,u,v,v],
+\chi_{mix}=D^4L[u,u,v,v]
 \]
 
-with `u` the top Hessian eigenvector and `v` a frozen transverse direction derived from the sharpness gradient.
+was measurable and passed engineering/estimation gates, but failed the frozen regime-robust held-out success criteria.
 
-Estimator feasibility and target acquisition were established before the final held-out test. The preregistered B4 comparison then asked whether adding `chi_mix` to the strongest frozen lower-order/rotation baseline improved future sharpness prediction across two sustained-EoS regimes.
+Across 30 checkpoints / 16 seed groups:
 
-Primary B4 result (`N3 -> N4`, 30 checkpoints, 16 seed groups):
+- MAE: `2.0926 -> 1.9942`;
+- pooled gain: `4.70%`;
+- bootstrap CI: `[-0.0619, 0.1511]`;
+- eta-specific gain: `+14.76%` at `0.018`, `-2.66%` at `0.020`.
 
-- MAE: `2.0926 -> 1.9942` (`+4.70%` gain);
-- R2: `0.71795 -> 0.72120` (`Delta R2 = 0.00325`);
-- residual Spearman: `0.3277`;
-- sign agreement: `0.6333`;
-- seed-group bootstrap CI for MAE gain: `[-0.0619, 0.1511]`;
-- paired permutation `p = 0.0428`.
+**Final verdict:** `FAIL_NO_PRIMARY_NEURAL_INCREMENTAL_VALUE`.
 
-The preregistered regime-robust incremental-value claim **failed**. The effect was heterogeneous across `eta`: `+14.76%` MAE gain at `eta=0.018` versus `-2.66%` at `eta=0.020`. This heterogeneity is exploratory and is not treated as confirmation.
+This negative result is part of the contribution: a measurable high-order descriptor was not post-hoc promoted after failing the preregistered robustness gates.
 
-The paper-faithful Liao-mechanistic subset remained inconclusive because too few independent seed groups survived the exact applicability/moving-reference pipeline.
+## What failed — and changed the project
 
-See `experiments/G8_10/` for the compact public record.
+- generic additive noise as the main spectral mechanism;
+- a universal centered temporal-covariance “memory” mechanism for ordinary iid SGD;
+- simple linear \(K_{st}\) propagation as a universal neural predictive closure;
+- operator difference as sufficient evidence of spectral difference;
+- “higher cumulants matter” as a novelty claim;
+- regime-robust neural incremental value of \(\chi_{mix}\).
 
-## Theory status
+Each failure narrowed the final question from “find a new stochastic effect” to **identify the information needed for a specified finite-step observable**.
 
-Two main theory tracks are retained:
+## Final conclusion
 
-1. **Noise-geometry / descriptor sufficiency.** Which local stochastic descriptors are required for finite-step stability and observable dynamics?
-2. **Higher-order finite-horizon geometry.** Which higher derivatives/cumulants can matter beyond additive-covariance closures, and which survive held-out predictive tests?
+Finite-step SGD dynamics cannot, in general, be summarized by one scalar noise amplitude or by an unqualified low-order stochastic closure.
 
-Broad novelty claims are avoided where the ingredients overlap stochastic modified equations, weak expansions, B-series, cumulant expansions, and multiplicative-noise theory.
+Controlled models show that **state-dependent stochastic geometry can change stability and matched-system behavior**. Neural transfer tests simultaneously show that **adding more sophisticated local descriptors does not automatically improve robust prediction**.
+
+The v1 outcome is therefore a map of **successful, insufficient, and falsified stochastic descriptions of SGD**, rather than one universal formula.
 
 ## Literature boundary
 
 The project is positioned relative to:
 
-- Liao et al. (2026), stochastic sharpness-gap / EoS dynamics;
-- Ignashin et al. (2026), discrete finite-step SGD beyond Brownian closure;
-- stochastic modified-equation and weak-expansion literature;
-- state-dependent / multiplicative gradient-noise theory;
-- stochastic approximation and mean-square stability theory.
+- **Liao et al. (2026):** stochastic sharpness-gap / edge-of-stability dynamics;
+- **Ignashin et al. (2026):** finite-step SGD beyond Brownian closure;
+- stochastic modified equations and weak expansions;
+- stochastic B-series and cumulant expansions;
+- state-dependent / multiplicative gradient-noise and mean-square stability theory.
 
-## Evidence policy
-
-Claims are tagged as analytical, controlled numerical, exploratory, inconclusive, or falsified. Negative results are preserved. A measurable descriptor is not promoted unless it produces a reproducible observable or held-out predictive consequence.
+Broad novelty is not claimed for ingredients that already exist in these literatures.
 
 ## Repository map
 
-- `docs/current_research_state.md` — current state and strongest claims;
-- `docs/claims_and_evidence.md` — claim ledger;
-- `docs/theory/` — theory notes and limitations;
-- `experiments/` — compact public experiment records;
-- `paper/` — manuscript outline and evidence roadmap.
+- [`FINAL_RESEARCH_SUMMARY.md`](FINAL_RESEARCH_SUMMARY.md) — complete v1 narrative;
+- [`PROJECT_FREEZE_v1.md`](PROJECT_FREEZE_v1.md) — exact freeze boundary and v2 separation;
+- [`docs/claims_and_evidence.md`](docs/claims_and_evidence.md) — evidence ledger;
+- [`docs/portfolio_key_results.md`](docs/portfolio_key_results.md) — three recommended portfolio visuals;
+- [`research_history/`](research_history/) — compressed research-history map;
+- [`experiments/M9/`](experiments/M9/) — controlled noise-geometry benchmark;
+- [`experiments/G8_10/`](experiments/G8_10/) — neural higher-order falsification test.
 
-Large checkpoints, full logs, archives, and canonical experiment records remain in the project archive and are not duplicated in Git.
+Large checkpoints, complete proof logs, raw trajectories, and canonical archives remain in project storage rather than being duplicated in Git.
+
+## Evidence policy
+
+Claims are separated into **analytical**, **controlled numerical**, **exploratory**, **inconclusive**, and **falsified**. A descriptor is not promoted merely because it is measurable or correlated; it must survive a stated theorem or held-out predictive test.
