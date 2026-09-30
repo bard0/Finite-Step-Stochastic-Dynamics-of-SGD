@@ -32,13 +32,13 @@ Under conditionally unbiased independently resampled with-replacement minibatchi
 
 ### E1. Controlled Duffing validation
 
-Under deliberately controlled assumptions, the spectral perturbation predictor achieved approximately:
+In the controlled Duffing setting, the spectral perturbation predictor achieved approximately:
 
 - MAE \(1.5\times10^{-7}\);
 - median relative error \(2.5\times10^{-3}\);
 - Spearman correlation \(0.999\).
 
-**Status:** strong controlled validation of the machinery, not a universal SGD claim.
+**Status:** controlled validation in this setting, not a universal SGD claim.
 
 ### E2. M9 stability prediction
 
@@ -80,9 +80,9 @@ Observed MAE gain was \(+14.76\%\) at \(\eta=0.018\) and \(-2.66\%\) at \(\eta=0
 
 ### X2. Late matched-information finite-step theory
 
-Local finite-horizon constructions show that separate pointwise/marginal descriptors can fail to determine future sharpness. Subsequent adversarial checks also show that compact frozen-law quotients need additional time-ordered information under genuinely moving stochastic laws.
+Local finite-horizon constructions show that separate pointwise or marginal descriptors can fail to determine future sharpness. Later checks also show that compact frozen-law quotients need extra time-ordered information once the stochastic law moves with time or state.
 
-**Status:** internally useful v2 theory frontier; no general v1 priority or long-horizon theorem claim.
+**Status:** possible v2 theory direction; not a general v1 theorem.
 
 ## Falsified / downgraded
 
@@ -97,4 +97,4 @@ Local finite-horizon constructions show that separate pointwise/marginal descrip
 
 ## v1 conclusion
 
-The defensible project-level conclusion is a **descriptor-sufficiency map**: finite-step SGD can depend on state-dependent stochastic structure beyond scalar noise amplitude, but progressively richer descriptors must be justified by observable or held-out predictive consequences rather than by formal expandability alone.
+The v1 conclusion is that finite-step SGD can depend on state-dependent stochastic structure beyond scalar noise amplitude, but adding richer descriptors only matters if they change a concrete observable or improve held-out prediction.
