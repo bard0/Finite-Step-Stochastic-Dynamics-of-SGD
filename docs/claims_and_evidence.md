@@ -1,10 +1,12 @@
-# Claims and Evidence
+# Claims and Evidence — v1 Freeze
 
-## Confirmed / analytical
+**Freeze date:** 2026-09-30
 
-### C1. Low-order descriptor insufficiency for mean-square stability
+## Confirmed analytical / methodological
 
-An explicit scalar finite-sum SGD construction can match the population Hessian and zero-order gradient-noise covariance while changing the exact finite-step second-moment stability threshold through multiplicative noise geometry.
+### C1. Low-order descriptor insufficiency for finite-step mean-square stability
+
+An explicit scalar finite-sum construction can match the lower-order reference geometry while changing the exact mean-square stability threshold through state-dependent stochastic geometry:
 
 \[
 q=(1-\eta\lambda)^2+\eta^2G_\Sigma,
@@ -14,93 +16,85 @@ q=(1-\eta\lambda)^2+\eta^2G_\Sigma,
 
 **Status:** confirmed analytical existence result.
 
-### C2. Additive-noise baseline
+### C2. Additive-noise control
 
-For `G_Sigma=0`, the mean-square boundary reduces to `eta_c=2/lambda`.
+For \(G_\Sigma=0\), the boundary reduces to \(2/\lambda\). Controlled additive zero-mean noise does not support a generic physical mean spectral-shift mechanism by noise amplitude alone.
 
-**Status:** confirmed analytical baseline.
+**Status:** confirmed analytical/control result.
 
-### C3. iid filtration correction
+### C3. iid temporal-covariance correction
 
-For conditionally unbiased independently resampled with-replacement minibatches, centered innovations are martingale differences; generic nonzero cross-time centered covariance is not the missing universal iid descriptor.
+Under conditionally unbiased independently resampled with-replacement minibatching, centered innovations are martingale differences; generic centered cross-time covariance is not a universal iid-SGD memory descriptor.
 
 **Status:** confirmed methodological correction.
 
 ## Controlled numerical evidence
 
-### E1. M9 threshold prediction
+### E1. Controlled Duffing validation
 
-Frozen `G_Sigma` predictors substantially improve system-level and matched A-B stability-threshold prediction in the tested 1D family.
+Under deliberately controlled assumptions, the spectral perturbation predictor achieved approximately:
 
-- system-level `eta_c`: R2 `0.7791`, Spearman `0.8714`;
-- matched `Delta eta_c`: R2 `0.8485`, Spearman `0.9543`.
+- MAE \(1.5\times10^{-7}\);
+- median relative error \(2.5\times10^{-3}\);
+- Spearman correlation \(0.999\).
 
-**Status:** controlled confirmatory evidence for the tested family; not a general neural-SGD claim.
+**Status:** strong controlled validation of the machinery, not a universal SGD claim.
 
-### E2. M9 sharpness prediction
+### E2. M9 stability prediction
 
-The projected-noise baseline already explains most of the absolute sharpness gap (R2 `0.9519`), while the noise-geometry model improves to R2 `0.9943`. For matched A-B differences, the noise-geometry model reaches R2 `0.9835`, Spearman `0.9777`.
+Noise-geometry predictors achieve:
 
-**Status:** incremental support for noise geometry; not evidence that leading projected-noise theory fails for absolute sharpness.
+- system-level \(\eta_c\): \(R^2=0.7791\), Spearman \(0.8714\);
+- matched \(\Delta\eta_c\): \(R^2=0.8485\), Spearman \(0.9543\).
 
-### E3. G8.10 estimator feasibility
+**Status:** controlled confirmatory evidence for the tested family.
 
-The mixed-fourth descriptor `chi_mix = D^4L[u,u,v,v]` was made numerically measurable on the tested smooth neural model after convergence-driven Hessian eigensolver repair. Descriptor replication and finite-horizon target acquisition also passed their engineering/measurement gates before the final predictive test.
+### E3. M9 sharpness prediction
 
-**Status:** measurement feasibility only. This does not imply predictive or causal relevance.
+- absolute sharpness gap: projected-noise baseline \(R^2=0.9519\), noise-geometry \(R^2=0.9943\);
+- matched \(\Delta S\): noise-geometry \(R^2=0.9835\), Spearman \(0.9777\).
 
-## Confirmatory negative / inconclusive evidence
+**Status:** incremental support for noise geometry, strongest in matched-system separation.
 
-### N1. G8.10-B4 primary neural incremental-value test
+## Confirmatory negative / inconclusive
 
-Frozen comparison: strongest baseline `N3` versus `N4=N3+chi_mix`, with grouped held-out evaluation on fresh seed groups.
+### N1. G8.10-B4 neural incremental-value test
 
-Observed pooled metrics:
+Adding \(\chi_{mix}=D^4L[u,u,v,v]\) to the strongest frozen lower-order baseline did not jointly satisfy the preregistered magnitude, uncertainty, residual-correlation, sign, and cross-regime robustness gates.
 
-- MAE `2.0926 -> 1.9942`;
-- MAE gain `0.04699`, 95% bootstrap CI `[-0.06188, 0.15109]`;
-- `Delta R2 = 0.00325`, CI `[-0.05698, 0.04135]`;
-- residual Spearman `0.3277`, CI crossing zero;
-- sign agreement `0.6333`;
-- paired permutation `p = 0.0428`.
+**Status:** `FAIL_NO_PRIMARY_NEURAL_INCREMENTAL_VALUE`.
 
-The preregistered magnitude, uncertainty, residual-correlation, sign, and two-regime robustness gates were not jointly satisfied.
+### N2. Secondary Liao moving-reference subset
 
-**Status:** `FAIL_NO_PRIMARY_NEURAL_INCREMENTAL_VALUE`. The strong regime-robust neural incremental-value claim is falsified for the tested B4 design.
+Only 3 independent seed groups survived the exact applicability/moving-reference pipeline.
 
-### N2. G8.10-B4 secondary Liao-mechanistic subset
+**Status:** inconclusive; no failure of the Liao mechanism is inferred.
 
-Only 3 independent seed groups survived the exact applicability/moving-reference pipeline; the frozen requirement was at least 6 total and at least 3 per primary eta.
+## Exploratory / archived theory frontier
 
-**Status:** `INCONCLUSIVE_LIAO_MOVING_REFERENCE_ATTRITION`. No scientific failure of the Liao mechanism is inferred.
+### X1. Eta-dependent \(\chi_{mix}\) heterogeneity
 
-## Exploratory
+Observed MAE gain was \(+14.76\%\) at \(\eta=0.018\) and \(-2.66\%\) at \(\eta=0.020\).
 
-### X1. Eta-dependent `chi_mix` effect
+**Status:** exploratory only.
 
-In the B4 eta-stratified analysis, MAE gain was `+14.76%` at `eta=0.018` and `-2.66%` at `eta=0.020`. Within-eta analyses also showed improvements, but these observations are post-hoc relative to the failed pooled confirmatory claim.
+### X2. Late matched-information finite-step theory
 
-**Status:** exploratory only; requires influence, residualization, collinearity, and independent prospective confirmation before promotion.
+Local finite-horizon constructions show that separate pointwise/marginal descriptors can fail to determine future sharpness. Subsequent adversarial checks also show that compact frozen-law quotients need additional time-ordered information under genuinely moving stochastic laws.
 
-### X2. Fourth-moment / random-Hessian separation beyond second-order closures
-
-Matched second-order descriptors may fail to determine stationary fourth moments or higher harmonic stability when random Hessian distributions differ in higher moments.
-
-**Status:** exploratory theory branch; not yet promoted to a project claim.
-
-## Internally proved but novelty-limited theory
-
-### T1. Higher-order covariance jets
-
-Fixed-horizon covariance expansions identify local stochastic information beyond additive covariance, including covariance-field derivatives and higher cumulants.
-
-**Status:** internally derived/audited; generic ingredients overlap strongly with stochastic modified equations, weak expansions, B-series, and cumulant theory. No broad novelty claim.
+**Status:** internally useful v2 theory frontier; no general v1 priority or long-horizon theorem claim.
 
 ## Falsified / downgraded
 
-- universal Koopman/spectral theory of SGD as the main contribution;
-- generic claim that iid SGD has exploitable centered temporal noise covariance;
+- generic additive-noise spectral mechanism;
+- universal Koopman/spectral theory as the main contribution;
+- universal centered temporal-covariance memory for ordinary iid SGD;
+- simple linear \(K_{st}\) propagation as a universal neural closure;
 - operator difference as sufficient evidence of spectral difference;
-- third-cumulant-only novelty;
-- pure second-order covariance closure as a complete neural SGD description;
-- regime-robust incremental predictive value of `chi_mix` under the preregistered G8.10-B4 design.
+- third-cumulant-only or “higher moments matter” novelty;
+- regime-robust neural incremental value of \(\chi_{mix}\) in G8.10-B4;
+- any claim that the latest frozen local coupling quotient is already a full moving-PGD/general-SGD closure.
+
+## v1 conclusion
+
+The defensible project-level conclusion is a **descriptor-sufficiency map**: finite-step SGD can depend on state-dependent stochastic structure beyond scalar noise amplitude, but progressively richer descriptors must be justified by observable or held-out predictive consequences rather than by formal expandability alone.
