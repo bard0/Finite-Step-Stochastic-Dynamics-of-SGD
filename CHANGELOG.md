@@ -2,15 +2,15 @@
 
 ## 2.0.0 — 2026-09-30 PROJECT_FREEZE_v1
 
-- Froze the exploratory/theoretical portfolio phase as v1.0.
+- Marked v1.0 complete.
 - Added `FINAL_RESEARCH_SUMMARY.md` with the full research narrative from controlled spectral tests through finite-step descriptor sufficiency.
 - Added `PROJECT_FREEZE_v1.md` defining the exact v1/v2 boundary.
 - Rewrote the public README around the final scientific question rather than the latest branch.
 - Added `docs/portfolio_key_results.md` with three recommended portfolio visuals and captions.
-- Added `research_history/README.md` to preserve the hypothesis/falsification trajectory without exposing the full internal archaeology as the entry point.
-- Updated the current-state and claim ledgers to include the late-theory self-falsification boundary.
+- Added `research_history/README.md` with a short account of how the hypotheses changed.
+- Updated the current-state and claim ledgers with the limits found in the late theory work.
 - Retained the G8.10-B4 neural result as a confirmatory negative result.
-- No unresolved late proof branch was promoted to a general moving-PGD, long-horizon, or neural theorem.
+- Kept unresolved moving-PGD, long-horizon, and neural extensions out of the v1 claims.
 
 ## 1.4.0 — 2026-09-15 neural-transfer falsification sync
 
