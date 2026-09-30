@@ -1,13 +1,13 @@
 # Current Research State
 
 **Frozen state:** 2026-09-30  
-**Milestone:** v1.0 portfolio research phase complete.
+**Milestone:** v1.0 complete.
 
 ## Final scientific question
 
 Which stochastic information is sufficient to predict a specified finite-step SGD stability or dynamical observable?
 
-The project no longer seeks a universal “extra correction term.” The mature framing is descriptor sufficiency / spectral closure for finite-step SGD.
+The project no longer looks for a universal “extra correction term.” The final framing is descriptor sufficiency / spectral closure for finite-step SGD.
 
 ## Final v1 analytical core
 
@@ -52,9 +52,9 @@ The eta heterogeneity remains exploratory only. The secondary paper-faithful Lia
 
 ## Late theory frontier
 
-Late finite-step proof work generated local matched-information constructions for future sharpness and repeatedly self-falsified overly compact closures. In particular, compact coupling quotients derived for frozen stochastic laws expand under genuinely moving stochastic laws.
+Late finite-step proof work produced local matched-information constructions for future sharpness, but also showed where the compact closure breaks down. In particular, coupling quotients derived for frozen stochastic laws expand when the stochastic law moves with time or state.
 
-These results are retained as v2 research material. They are not promoted to a general v1 moving-PGD, long-horizon, or neural theorem.
+These results are kept as possible v2 material. They are not used as a general moving-PGD, long-horizon, or neural theorem in v1.
 
 ## Final non-claims
 
@@ -62,4 +62,4 @@ v1 does not claim a universal neural SGD spectral law, universal critical batch-
 
 ## Project status
 
-**v1 is frozen.** New moving-reference theorems, multidimensional transfer, prospective neural confirmation, or external priority work must be opened as v2 rather than appended indefinitely to the v1 claim ledger.
+**v1 is complete.** Moving-reference theory, multidimensional transfer, another prospective neural test, or a theorem-level priority study would start a separate v2.
