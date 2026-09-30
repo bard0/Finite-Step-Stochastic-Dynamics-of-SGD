@@ -1,7 +1,7 @@
 # PROJECT_FREEZE_v1
 
 **Freeze date:** 2026-09-30  
-**Public status:** completed portfolio research phase  
+**Public status:** v1.0 complete  
 **Repository line:** finite-step stochastic dynamics of SGD
 
 ## Frozen v1 scope
@@ -15,7 +15,7 @@ v1 includes the research line from the original spectral/noise question through:
 - M9 controlled predictor benchmark;
 - repaired temporal-covariance branch and its downgrade;
 - G8.10 higher-order neural transfer test and confirmatory negative verdict;
-- late finite-step closure proofs as archived theory frontier, without promotion to a general theorem.
+- late finite-step closure work kept as future theory material, without treating it as a general theorem.
 
 ## Final headline claims
 
@@ -49,7 +49,7 @@ v1 includes the research line from the original spectral/noise question through:
 
 ## v2 boundary
 
-The following are explicitly **not required to complete v1** and belong to a possible v2:
+The following are outside v1 and would belong to a possible v2:
 
 - moving-reference / moving-PGD spectral-closure theorem;
 - long-horizon remainder control;
@@ -58,17 +58,17 @@ The following are explicitly **not required to complete v1** and belong to a pos
 - prospective neural confirmation of regime-dependent higher-order effects;
 - external theorem-by-theorem priority review sufficient for a publication claim.
 
-No v1 claim may be retroactively strengthened using exploratory v2 work without a new preregistered or theorem-audited evidence update.
+If any of these directions is revisited, it should be evaluated as new work rather than used to rewrite the v1 result after the fact.
 
 ## Stop rule
 
-The v1 research line is considered complete. New hypotheses should open a new milestone/version rather than extend the v1 claim ledger indefinitely.
+v1 is complete. New hypotheses should open a new version rather than extend the old claim ledger indefinitely.
 
 
 ## Frozen reference
 
 - frozen branch: `freeze-v1.0`
 - frozen commit: `532bdf8c4b57749a9cc9bc02056f48c072808819`
-- portfolio freeze bundle SHA256: `13b5b087312e2d157761df41c58ad4ea00abf4af55f19291664cbe521cc18a08`
+- freeze bundle SHA256: `13b5b087312e2d157761df41c58ad4ea00abf4af55f19291664cbe521cc18a08`
 
-The local freeze bundle is a compact portfolio package; the canonical full experiment archives remain in project storage.
+The freeze bundle is a compact copy of the public project record; full experiment archives remain in project storage.
