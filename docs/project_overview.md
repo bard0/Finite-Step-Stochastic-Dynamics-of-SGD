@@ -1,21 +1,25 @@
-# Finite-Step Stochastic Dynamics of SGD
+# Project Overview
 
-## Research direction
+This repository records a completed v1.0 research project on finite-step SGD.
 
-This repository studies finite-step stochastic gradient descent as a stochastic dynamical system.
+## Question
 
-The current focus is temporal stochastic geometry: whether temporal organization of gradient noise contains predictive information about finite-horizon covariance dynamics beyond matched one-step noise statistics.
+The project began with spectral perturbation ideas and ended with a more specific question:
 
-## Evolution
+**Which stochastic descriptors are sufficient to determine a finite-step stability or dynamical quantity?**
 
-- Controlled stochastic dynamics and spectral validation
-- Local curvature-covariance mechanism validation
-- Residual falsification tests
-- Zero-fit finite-step prediction
-- Finite-horizon covariance propagation
-- Temporal covariance and random reshuffling studies
-- Causal temporal-ordering ablations
+## What survived
 
-## Claim discipline
+- controlled spectral perturbation works well in the Duffing testbed when its assumptions are enforced;
+- additive noise amplitude alone is not a generic spectral-shift mechanism;
+- state-dependent noise geometry can change exact mean-square stability even when simpler local descriptors match;
+- M9 supports this effect in controlled matched-system prediction;
+- a higher-order neural descriptor, chi_mix, did not pass the preregistered cross-regime test.
 
-The project does not claim a universal theory of SGD. Results are restricted to experimentally validated regimes.
+## What was dropped
+
+The project no longer uses a universal temporal-covariance mechanism as its main explanation for iid SGD, and it does not treat a formal higher-order expansion as evidence of practical relevance by itself.
+
+## Status
+
+v1.0 is complete. Moving-reference theory, long-horizon control, multidimensional transfer, and new prospective neural tests are separate future-work questions.
