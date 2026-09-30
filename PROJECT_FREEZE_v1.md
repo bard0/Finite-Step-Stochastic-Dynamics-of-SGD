@@ -63,3 +63,12 @@ No v1 claim may be retroactively strengthened using exploratory v2 work without 
 ## Stop rule
 
 The v1 research line is considered complete. New hypotheses should open a new milestone/version rather than extend the v1 claim ledger indefinitely.
+
+
+## Frozen reference
+
+- frozen branch: `freeze-v1.0`
+- frozen commit: `532bdf8c4b57749a9cc9bc02056f48c072808819`
+- portfolio freeze bundle SHA256: `13b5b087312e2d157761df41c58ad4ea00abf4af55f19291664cbe521cc18a08`
+
+The local freeze bundle is a compact portfolio package; the canonical full experiment archives remain in project storage.
