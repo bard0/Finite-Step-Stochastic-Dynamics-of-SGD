@@ -1,94 +1,65 @@
 # Current Research State
 
-Last synchronized with the project archive: **2026-09-15**.
+**Frozen state:** 2026-09-30  
+**Milestone:** v1.0 portfolio research phase complete.
 
-## 1. Current question
+## Final scientific question
 
-Which stochastic information is required to predict finite-step SGD behavior near stability boundaries, and which candidate descriptors survive held-out neural transfer tests?
+Which stochastic information is sufficient to predict a specified finite-step SGD stability or dynamical observable?
 
-The earlier universal temporal-covariance hypothesis remains rejected for ordinary iid/with-replacement minibatching under standard conditional-unbiasedness assumptions. The main line therefore focuses on state-dependent stochastic geometry, finite-step dynamics, and falsifiable higher-order descriptors.
+The project no longer seeks a universal “extra correction term.” The mature framing is descriptor sufficiency / spectral closure for finite-step SGD.
 
-## 2. Confirmed mathematical core
+## Final v1 analytical core
 
-### Scalar descriptor-insufficiency counterexample
+### A1. Exact scalar finite-step stability construction
 
-There is an explicit finite-sum construction in which two systems share the same population objective locally, the same population Hessian `H`, and the same zero-order gradient-noise covariance `Sigma(0)`, but differ in state-dependent noise geometry and in the exact finite-step mean-square stability boundary.
-
-For the solvable scalar model,
+There is an explicit scalar finite-sum SGD construction in which lower-order reference descriptors match while state-dependent stochastic geometry changes the exact second-moment stability boundary:
 
 \[
-q=(1-\eta\lambda)^2+\eta^2 G_\Sigma,
+q=(1-\eta\lambda)^2+\eta^2G_\Sigma,
 \qquad
 \eta_c=\frac{2\lambda}{\lambda^2+G_\Sigma}.
 \]
 
-The additive control has `G_Sigma=0` and recovers `2/lambda`.
+This is an existence / insufficiency theorem. It does not claim novelty for multiplicative noise or mean-square stability theory.
 
-This is an existence / insufficiency statement, not a claim that multiplicative noise or mean-square stability theory is new.
+### A2. Additive control
 
-## 3. M9 controlled evidence
+For \(G_\Sigma=0\), the boundary reduces to \(2/\lambda\). Controlled additive-noise tests likewise do not support a generic physical mean spectral shift from scalar noise amplitude alone.
 
-M9 tests frozen predictors in a controlled 1D stochastic family.
+### A3. iid temporal-covariance correction
 
-- system-level `eta_c`: noise-geometry model R2 `0.7791`, Spearman `0.8714`;
-- matched `Delta eta_c`: R2 `0.8485`, Spearman `0.9543`;
-- absolute sharpness gap: projected-noise baseline R2 `0.9519`, noise-geometry model R2 `0.9943`;
-- matched `Delta S`: noise-geometry model R2 `0.9835`, Spearman `0.9777`.
+For conditionally unbiased independently resampled with-replacement minibatches, centered innovations are martingale differences. A generic nonzero cross-time centered covariance is therefore not a universal iid-SGD memory descriptor.
 
-The evidence supports an incremental role for state-dependent noise geometry, especially in matched-system differences and stability prediction. It does not show that leading projected-noise EoS theory fails for absolute sharpness.
+## Final controlled evidence
 
-## 4. G8.10 mixed-fourth neural branch
+### M9
 
-The neural branch tests
+- system-level \(\eta_c\): \(R^2=0.7791\), Spearman \(0.8714\);
+- matched \(\Delta\eta_c\): \(R^2=0.8485\), Spearman \(0.9543\);
+- absolute sharpness gap: projected-noise baseline \(R^2=0.9519\), noise-geometry model \(R^2=0.9943\);
+- matched \(\Delta S\): noise-geometry \(R^2=0.9835\), Spearman \(0.9777\).
 
-\[
-\chi_{mix}=D^4L[u,u,v,v],
-\]
+Interpretation: state-dependent noise geometry has controlled incremental value, especially in matched-system separation and stability prediction.
 
-where `u` is the top Hessian eigenvector and `v` is a frozen transverse direction derived from the sharpness gradient.
+## Final neural evidence
 
-Estimator feasibility, descriptor replication, and finite-horizon target acquisition were established before the final predictive test.
+The preregistered G8.10-B4 comparison \(N3\) versus \(N4=N3+\chi_{mix}\) did not satisfy the frozen regime-robust success gates.
 
-### B4 primary held-out test
+**Verdict:** `FAIL_NO_PRIMARY_NEURAL_INCREMENTAL_VALUE`.
 
-The frozen primary comparison was `N3` (strong lower-order + stochastic + finite-step + rotation baseline) versus `N4=N3+chi_mix`, using fresh seed groups and grouped out-of-fold ridge regression.
+The eta heterogeneity remains exploratory only. The secondary paper-faithful Liao moving-reference subset remains inconclusive because too few independent seed groups passed the exact applicability pipeline.
 
-Across 30 usable checkpoints from 16 seed groups:
+## Late theory frontier
 
-- MAE `2.0926 -> 1.9942`;
-- MAE gain `0.04699`, 95% seed-group bootstrap CI `[-0.06188, 0.15109]`;
-- `Delta R2 = 0.00325`, CI `[-0.05698, 0.04135]`;
-- residual Spearman `0.3277`, CI `[-0.0704, 0.6311]`;
-- sign agreement `0.6333`;
-- paired permutation `p = 0.0428`.
+Late finite-step proof work generated local matched-information constructions for future sharpness and repeatedly self-falsified overly compact closures. In particular, compact coupling quotients derived for frozen stochastic laws expand under genuinely moving stochastic laws.
 
-The preregistered primary verdict is **`FAIL_NO_PRIMARY_NEURAL_INCREMENTAL_VALUE`** because the effect did not meet the frozen magnitude, uncertainty, correlation, sign, and cross-regime robustness gates.
+These results are retained as v2 research material. They are not promoted to a general v1 moving-PGD, long-horizon, or neural theorem.
 
-The eta-stratified MAE gain was `+14.76%` at `eta=0.018` but `-2.66%` at `eta=0.020`. This is retained only as exploratory evidence for possible regime dependence.
+## Final non-claims
 
-### Secondary Liao-mechanistic subset
+v1 does not claim a universal neural SGD spectral law, universal critical batch-size formula, new general state-dependent-noise theory, optimizer improvement, generalization improvement, or a complete long-horizon EoS closure.
 
-The secondary paper-faithful mechanism test is **inconclusive**. Only 3 independent seed groups survived the exact applicability/moving-reference pipeline; most attrition came from local alpha/beta prerequisite failure after exact KKT projection. This does not constitute evidence against the Liao mechanism itself.
+## Project status
 
-## 5. Higher-order covariance theory
-
-Internal fixed-horizon expansions identify additional local stochastic information beyond additive covariance, including covariance-field derivatives and higher cumulants. These derivations remain mathematically useful, but broad novelty is not claimed because the ingredients overlap stochastic modified equations, weak expansions, B-series, cumulant theory, and multiplicative-noise literature.
-
-The neural B4 result is an important constraint: measurability of a higher-order descriptor does not imply regime-robust predictive value.
-
-## 6. Important negative / narrowing results
-
-- additive zero-mean noise alone does not generically shift the local mean-Jacobian spectrum;
-- pure affine non-Gaussian noise can change the transition operator without changing its eigenvalues;
-- a universal temporal-covariance closure for iid SGD is not viable under standard filtration assumptions;
-- higher cumulants alone are not a defensible novelty claim;
-- the preregistered regime-robust neural incremental-value claim for `chi_mix` failed in G8.10-B4;
-- the secondary Liao-mechanistic B4 test remains unresolved because of applicability attrition, not because of a confirmed mechanism failure.
-
-## 7. Current priorities
-
-1. Finish the cheap post-hoc diagnostic of the observed eta heterogeneity without changing the B4 verdict.
-2. Only if a regime-dependent signal survives influence, residualization, collinearity, and negative-control audits, preregister a small independent confirmatory test.
-3. Continue genuine finite-sum/minibatch and multidimensional tests of the stronger M9 noise-geometry result.
-4. Keep exact comparison with Liao et al. 2026 and Ignashin et al. 2026 for every new theorem or neural claim.
-5. Preserve strict separation between theorem, controlled numerical evidence, exploratory hypotheses, inconclusive tests, and falsified claims.
+**v1 is frozen.** New moving-reference theorems, multidimensional transfer, prospective neural confirmation, or external priority work must be opened as v2 rather than appended indefinitely to the v1 claim ledger.
