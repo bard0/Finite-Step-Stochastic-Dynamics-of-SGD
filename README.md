@@ -25,11 +25,11 @@ An additive-noise control showed essentially no physical mean spectral shift. Th
 
 For a scalar finite-sum model,
 
-[
-q=(1-etalambda)^2+eta^2G_Sigma,
-qquad
-eta_c=rac{2lambda}{lambda^2+G_Sigma}.
-]
+\[
+q=(1-\eta\lambda)^2+\eta^2G_{\Sigma},
+\qquad
+\eta_c=\frac{2\lambda}{\lambda^2+G_{\Sigma}}.
+\]
 
 The construction shows that lower-order local descriptors can match while the exact finite-step second-moment stability threshold differs because the noise geometry depends on the state.
 
