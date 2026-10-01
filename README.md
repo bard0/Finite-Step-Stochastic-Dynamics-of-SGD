@@ -15,9 +15,9 @@ Possible moving-reference, long-horizon, and broader neural extensions are kept 
 
 In a stochastic Duffing system, the perturbative spectral predictor agreed closely with directly measured spectral shifts when the assumptions of the approximation were enforced:
 
-- mean absolute error: about (1.5\times10^{-7});
-- median relative error: about (2.5\times10^{-3});
-- Spearman correlation: about (0.999).
+- mean absolute error: about $1.5\times10^{-7}$;
+- median relative error: about $2.5\times10^{-3}$;
+- Spearman correlation: about $0.999$.
 
 An additive-noise control showed essentially no physical mean spectral shift. This ruled out the simple explanation that noise amplitude alone drives the effect.
 
@@ -39,20 +39,20 @@ The claim is intentionally narrow: this is a descriptor-insufficiency result, no
 
 | target | simpler baseline | noise-geometry model |
 |---|---:|---:|
-| system-level (eta_c), (R^2) | -1.2446 | **0.7791** |
-| matched A-B (Deltaeta_c), (R^2) | -2.2405 | **0.8485** |
-| absolute sharpness gap, (R^2) | 0.9519 | **0.9943** |
-| matched A-B (Delta S), (R^2) | -0.1682 | **0.9835** |
+| system-level $\eta_c$, $R^2$ | -1.2446 | **0.7791** |
+| matched A-B $\Delta\eta_c$, $R^2$ | -2.2405 | **0.8485** |
+| absolute sharpness gap, $R^2$ | 0.9519 | **0.9943** |
+| matched A-B $\Delta S$, $R^2$ | -0.1682 | **0.9835** |
 
-The simpler projected-noise model already explains most of the absolute sharpness variation. The additional value of (G_Sigma) is clearest in matched-system differences and stability-threshold prediction.
+The simpler projected-noise model already explains most of the absolute sharpness variation. The additional value of $G_{\Sigma}$ is clearest in matched-system differences and stability-threshold prediction.
 
 ### 4. Neural higher-order test
 
 The neural branch tested
 
-[
-chi_{mix}=D^4L[u,u,v,v]
-]
+\[
+\chi_{\mathrm{mix}}=D^4L[u,u,v,v].
+\]
 
 on fresh seed groups against a strong lower-order baseline.
 
